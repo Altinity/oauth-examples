@@ -8,8 +8,15 @@ This setup runs Grafana and ClickHouse in Docker (locally). Grafana uses Azure A
 
 To run this setup, you must have Azure already configured. You need to know two values:
 
-* Your Tenant ID. You can find it in your Home page.
-* Your application's Client ID (Application ID). You can find it in your app overview: (insert screenshot here).
+
+* Your Tenant ID. You can find it in your Home page:
+  
+  ![image](https://github.com/user-attachments/assets/ecaf4832-2c5a-4db9-9f16-7ba17888266b)
+
+* Your application's Client ID (Application ID). You can find it in your app overview:
+
+  ![image](https://github.com/user-attachments/assets/44896038-d549-4e69-bf8a-aa8bc00d309c)
+
 * One of your application's Client Secrets.
 
 #### Run in Docker
@@ -43,7 +50,9 @@ grafana-1     | ✔ Downloaded and extracted vertamedia-clickhouse-datasource v3
 
 4. In your web browser, go to `http://localhost:3000`.
 
-5. Click "Sign in with Azure AD" on the login page: Screenshot
+5. Click "Sign in with Azure AD" on the login page:
+
+   ![Screenshot from 2025-02-19 13-12-23](https://github.com/user-attachments/assets/ebd9d3fa-0048-49a7-bec2-948253c1f8ee)
 
 6. Login to your Microsoft / Azure account if prompted.
 
@@ -60,9 +69,11 @@ grafana-1     | ✔ Downloaded and extracted vertamedia-clickhouse-datasource v3
 
 1. Go to "Explore" tab: ![Screenshot from 2024-12-16 15-56-05](https://github.com/user-attachments/assets/ddf1fbe4-3341-41df-b935-00cc064ffb74)
 
-2. In this view: ![Screenshot from 2024-12-16 15-57-17](https://github.com/user-attachments/assets/5fbeac22-8a20-432e-b779-b07c459bf15e)
+2. In this view:
     * Switch to "SQL Editor" mode
     * Switch "Format As" to "table"
+  
+![Screenshot from 2024-12-16 15-57-17](https://github.com/user-attachments/assets/5fbeac22-8a20-432e-b779-b07c459bf15e)
 
 3. Enter the query: `select currentUser()`, and press "Run Query", the username shall be printed. The username is the same as `sub` value in your Azure AD. 
 
