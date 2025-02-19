@@ -67,7 +67,9 @@ grafana-1     | ✔ Downloaded and extracted vertamedia-clickhouse-datasource v3
 
 #### Try it
 
-1. Go to "Explore" tab: ![Screenshot from 2024-12-16 15-56-05](https://github.com/user-attachments/assets/ddf1fbe4-3341-41df-b935-00cc064ffb74)
+1. Go to "Explore" tab:
+
+![Screenshot from 2024-12-16 15-56-05](https://github.com/user-attachments/assets/ddf1fbe4-3341-41df-b935-00cc064ffb74)
 
 2. In this view:
     * Switch to "SQL Editor" mode
