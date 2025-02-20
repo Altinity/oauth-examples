@@ -30,7 +30,7 @@ git clone https://github.com/zvonand/grafana-oauth.git
 ```
 CLIENT_ID=<Client ID (Application ID)>
 TENANT_ID=<Tenant ID>
-CLIENT_SECRET=<Client Secret>.
+CLIENT_SECRET=<Client Secret>
 ```
 
 You can create this file with this command and after that insert your values there:
