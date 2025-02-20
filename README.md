@@ -11,7 +11,7 @@ To run this setup, you must have Azure already configured. You need to know two 
 
 * Your Tenant ID. You can find it in your Home page:
   
-  ![image](https://github.com/user-attachments/assets/ecaf4832-2c5a-4db9-9f16-7ba17888266b)
+  ![image](https://github.com/user-attachments/assets/47b72126-2da6-4c65-96f1-0049a945e82d)
 
 * Your application's Client ID (Application ID). You can find it in your app overview:
 
