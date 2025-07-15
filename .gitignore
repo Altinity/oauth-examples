@@ -1,4 +1,5 @@
 .env
+clickhouse-config/processor_directory.xml
 clickhouse
 
 # Prerequisites

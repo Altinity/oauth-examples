@@ -2,8 +2,8 @@
     <access_token_processors>
         <azuure>
             <provider>azure</provider>
-            <client_id>${CLIENT_ID}</client_id>
-            <tenant_id>${TENANT_ID}</tenant_id>
+            <client_id>$CLIENT_ID</client_id>
+            <tenant_id>$TENANT_ID</tenant_id>
             <cache_lifetime>60</cache_lifetime>
         </azuure>
     </access_token_processors>

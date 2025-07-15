@@ -9,7 +9,7 @@ This setup runs Grafana and ClickHouse in Docker (locally). Grafana uses Azure A
 To run this setup, you must have Azure already configured. You need to know two values:
 
 
-* Your Tenant ID. You can find it in your Home page:
+* Your Tenant ID. You can find it in your Home page (Go to [entra.microsoft.com](https://entra.microsoft.com/) and select Overview):
   
   ![image](https://github.com/user-attachments/assets/47b72126-2da6-4c65-96f1-0049a945e82d)
 
@@ -17,7 +17,7 @@ To run this setup, you must have Azure already configured. You need to know two 
 
   ![image](https://github.com/user-attachments/assets/44896038-d549-4e69-bf8a-aa8bc00d309c)
 
-* One of your application's Client Secrets.
+* One of your application's Client Secrets, which you can find at in [Entra dashboard](https://entra.microsoft.com/) under App Registrations->Certificates & secrets.
 
 #### Run in Docker
 
