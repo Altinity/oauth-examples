@@ -29,7 +29,7 @@ services:
 
   grafana:
     env_file: ".env"
-    image: ${GRAFANA_IMAGE:-grafana/grafana:latest}
+    image: ${GRAFANA_IMAGE:-grafana/grafana:12.0.2}
     ports:
       - "3000:3000"
     volumes:

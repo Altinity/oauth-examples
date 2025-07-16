@@ -11,7 +11,23 @@
       "redirectUris": ["http://localhost:3000/login/generic_oauth"],
       "baseUrl": "http://localhost:3000",
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": true
+      "directAccessGrantsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "jsonType.label": "String",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "users": [
@@ -22,12 +38,19 @@
       "firstName": "Demo",
       "lastName": "User",
       "emailVerified": true,
+      "groups": ["/grafana-admins"],
       "credentials": [
         {
           "type": "password",
           "value": "demo"
         }
       ]
+    }
+  ],
+  "groups": [
+    {
+      "name": "grafana-admins",
+      "path": "/grafana-admins"
     }
   ]
 }
