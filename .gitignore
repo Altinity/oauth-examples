@@ -1,6 +1,5 @@
 *.env
 azure/clickhouse-config/processor_directory.xml
-clickhouse
 
 # Prerequisites
 *.d

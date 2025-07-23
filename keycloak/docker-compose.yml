@@ -15,19 +15,21 @@ services:
       timeout: 30s
       retries: 20
 
-  # clickhouse:
-  #   env_file: ".env"
-  #   image: altinityinfra/clickhouse-server:920-25.6.2.28000.altinityantalya
-  #   ports:
-  #     - "8123:8123"
-  #   volumes:
-  #     - clickhouse-data:/var/lib/clickhouse
-  #     - ./clickhouse/clickhouse-low-ram-config.xml:/etc/clickhouse-server/config.d/clickhouse-low-ram-config.xml:ro
-  #     - ./clickhouse/clickhouse-low-ram-user-profile.xml:/etc/clickhouse-server/users.d/clickhouse-low-ram-user-profile.xml:ro
-  #     - ./clickhouse/startup_scripts.xml:/etc/clickhouse-server/config.d/startup_scripts.xml:ro
-  #     - ./clickhouse/processor_directory.xml:/etc/clickhouse-server/config.d/processor_directory.xml:ro
-  #   mem_limit: 4000M
-  #   cpus: 2.0
+  clickhouse:
+    image: altinityinfra/clickhouse-server:920-25.6.2.28000.altinityantalya    # TODO: always check for a newer version
+    ports:
+      - "8123:8123"
+    volumes:
+      # - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/clickhouse-low-ram-config.xml:/etc/clickhouse-server/config.d/clickhouse-low-ram-config.xml:ro
+      - ./clickhouse/clickhouse-low-ram-user-profile.xml:/etc/clickhouse-server/users.d/clickhouse-low-ram-user-profile.xml:ro
+      - ./clickhouse/startup_scripts.xml:/etc/clickhouse-server/config.d/startup_scripts.xml:ro
+      - ./clickhouse/processor_directory.xml:/etc/clickhouse-server/config.d/processor_directory.xml:ro
+    mem_limit: 4000M
+    cpus: 2.0
+    depends_on:
+      keycloak:
+        condition: service_healthy
 
   grafana:
     image: ${GRAFANA_IMAGE:-grafana/grafana:12.0.2}
@@ -50,7 +52,12 @@ services:
       - GF_INSTALL_PLUGINS=https://github.com/Altinity/clickhouse-grafana/releases/download/v3.3.0/vertamedia-clickhouse-datasource-3.3.0.zip;vertamedia-clickhouse-datasource
     ports:
       - "3000:3000"
+    # volumes:
+    #   - grafana-data:/var/lib/grafana
     depends_on:
       keycloak:
         condition: service_healthy
 
+# volumes:
+#   grafana-data:
+#   clickhouse-data:
