@@ -53,8 +53,11 @@ grafana-1     | ✔ Downloaded and extracted vertamedia-clickhouse-datasource v3
 
 3. Enter the query: `select currentUser()`, and press "Run Query", the username shall be printed. The username is the same as `sub` value in your Azure AD. 
 
-By default, ClickHouse does not grant any roles or privileges to external users. All the user can do is basically view his own name. That is why a role `token_test_role_1` is created on start-up, and and ClickHouse is configured to assign this role to __all__ users coming from Azure. This role allows to read all tables in `default` database. There is also a pre-defined table `default.test_table_1`.
+By default, ClickHouse does not grant any roles or privileges to external users. All the user can do is basically view his own name. That is why a role `general-role` and `can-read` roles is created on start-up.
 
-You can verify that user is actually able to read the table:
+* ClickHouse is configured to assign role `general-role` to __all__ users defined in Keycloak. This role allows to read `can_read_general` table in `default` database. This table is pre-defined and has one row.
+* Also, in Keycloak your user belongs to a group `can-read`. This group is mapped to the corresponding role in ClickHouse, and this role allows user to read `default.can_read_specific` table. This table is also pre-defined and has one row.
 
-4. Enter the query: `select * from default.test_table_1`, and press "Run Query". No exceptions shall be thrown, and table contents will be printed.
+You can verify that user is actually able to read the tables:
+
+4. Enter the query: `select * from default.can_read_specific` or `select * from default.can_read_general`, and press "Run Query". No exceptions shall be thrown, and table contents will be printed.

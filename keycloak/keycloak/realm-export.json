@@ -38,7 +38,7 @@
       "firstName": "Demo",
       "lastName": "User",
       "emailVerified": true,
-      "groups": ["/grafana-admins"],
+      "groups": ["/grafana-admins", "/can-read"],
       "credentials": [
         {
           "type": "password",
@@ -51,6 +51,10 @@
     {
       "name": "grafana-admins",
       "path": "/grafana-admins"
+    },
+    {
+      "name": "can-read",
+      "path": "/can-read"
     }
   ]
 }
