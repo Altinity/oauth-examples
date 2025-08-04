@@ -1,18 +1,7 @@
 services:
-  config-init:
-    image: zvonand/alpine_w_envsubst:latest
-    build:
-      context: ./alpine_w_envsubst/
-    volumes:
-      - ./substitute_secrets.sh:/scripts/substitute_secrets.sh
-      - ./.env:/scripts/.env:ro
-      - ./clickhouse-config:/clickhouse-config
-    entrypoint: >
-      sh -c "cd /scripts && chmod +x ./substitute_secrets.sh && sh ./substitute_secrets.sh"
-
   clickhouse:
     env_file: ".env"
-    image: altinityinfra/clickhouse-server:872-25.2.2.28878.altinityantalya
+    image: altinityinfra/clickhouse-server:920-25.6.2.28000.altinityantalya
     ports:
       - "8123:8123"
     volumes:
@@ -23,9 +12,6 @@ services:
       - ./clickhouse-config/processor_directory.xml:/etc/clickhouse-server/config.d/processor_directory.xml:ro
     mem_limit: 4000M
     cpus: 2.0
-    depends_on:
-      config-init:
-        condition: service_completed_successfully
 
   grafana:
     env_file: ".env"
@@ -53,8 +39,6 @@ services:
     depends_on:
       clickhouse:
         condition: service_started
-      config-init:
-        condition: service_completed_successfully
 
 volumes:
   grafana-data:
