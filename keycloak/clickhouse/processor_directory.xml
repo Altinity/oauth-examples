@@ -1,14 +1,13 @@
 <clickhouse>
-    <access_token_processors>
+    <token_processors>
         <keycloak>
             <provider>OpenID</provider>
             <userinfo_endpoint>http://keycloak:8080/realms/grafana/protocol/openid-connect/userinfo</userinfo_endpoint>
             <token_introspection_endpoint>http://keycloak:8080/realms/grafana/protocol/openid-connect/token/introspect</token_introspection_endpoint>
             <jwks_uri>http://keycloak:8080/realms/grafana/protocol/openid-connect/certs</jwks_uri>
-            <groups_claim_name>groups</groups_claim_name>
-            <cache_lifetime>60</cache_lifetime>
+            <token_cache_lifetime>60</token_cache_lifetime>
         </keycloak>
-    </access_token_processors>
+    </token_processors>
     <user_directories>
         <token>
             <processor>keycloak</processor>
