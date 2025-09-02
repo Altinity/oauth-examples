@@ -1,7 +1,7 @@
 <clickhouse>
     <token_processors>
         <azuure>
-            <provider>azure</provider>
+            <type>azure</type>
             <token_cache_lifetime>60</token_cache_lifetime>
         </azuure>
     </token_processors>
