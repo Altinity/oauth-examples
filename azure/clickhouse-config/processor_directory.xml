@@ -1,0 +1,16 @@
+<clickhouse>
+    <token_processors>
+        <azuure>
+            <provider>azure</provider>
+            <token_cache_lifetime>60</token_cache_lifetime>
+        </azuure>
+    </token_processors>
+    <user_directories>
+        <token>
+            <processor>azuure</processor>
+            <roles>
+                <token_test_role_1 />
+            </roles>
+        </token>
+    </user_directories>
+</clickhouse>
