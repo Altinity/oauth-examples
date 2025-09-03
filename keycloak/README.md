@@ -61,3 +61,18 @@ By default, ClickHouse does not grant any roles or privileges to external users.
 You can verify that user is actually able to read the tables:
 
 4. Enter the query: `select * from default.can_read_specific` or `select * from default.can_read_general`, and press "Run Query". No exceptions shall be thrown, and table contents will be printed.
+
+
+### Debugging
+
+You can obtain a token directly from your Keycloak instance:
+
+```
+curl --request POST   http://localhost:8080/realms/<realm name>/protocol/openid-connect/token --header "Content-Type: application/x-www-form-urlencoded" --data "client_id=<your client_id>" --data "username=<your username>" --data "password=<your password>" --data "grant_type=password" --data "client_secret=<your secret>" --data "scope=openid profile email"
+```
+
+In order to be able to make such request, you need to allow in in Keycloak:
+
+1. Navigate to your realm → Clients → select your client app.
+2. In general settings: set "Client authentication" to "off" (off = public, on = confidential).
+3. Enable Direct Access Grants.
