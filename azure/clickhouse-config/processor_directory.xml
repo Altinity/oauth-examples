@@ -8,9 +8,9 @@
     <user_directories>
         <token>
             <processor>azuure</processor>
-            <roles>
+            <common_roles>
                 <token_test_role_1 />
             </roles>
-        </token>
+        </common_roles>
     </user_directories>
 </clickhouse>

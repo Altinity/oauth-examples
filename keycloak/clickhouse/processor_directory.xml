@@ -11,9 +11,9 @@
     <user_directories>
         <token>
             <processor>keycloak</processor>
-            <roles>
+            <common_roles>
                 <general-role />
-            </roles>
+            </common_roles>
         </token>
     </user_directories>
 </clickhouse>
