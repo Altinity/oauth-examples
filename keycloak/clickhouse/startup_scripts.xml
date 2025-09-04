@@ -10,13 +10,6 @@
         </scripts>
 
         <scripts>
-            <query>GRANT SELECT ON default.can_read_specific TO 'can-read'</query>
-        </scripts>
-        <scripts>
-            <query>GRANT SELECT ON default.can_read_general TO 'general-role'</query>
-        </scripts>
-
-        <scripts>
             <query>CREATE TABLE default.can_read_specific (str String) ENGINE=TinyLog</query>
         </scripts>
         <scripts>
@@ -28,6 +21,13 @@
         </scripts>
         <scripts>
             <query>INSERT INTO default.can_read_general VALUES ('can_read_general');</query>
+        </scripts>
+
+        <scripts>
+            <query>GRANT SELECT ON default.can_read_specific TO 'can-read'</query>
+        </scripts>
+        <scripts>
+            <query>GRANT SELECT ON default.can_read_general TO 'general-role'</query>
         </scripts>
     </startup_scripts>
 </clickhouse>
