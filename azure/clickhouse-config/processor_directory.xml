@@ -11,6 +11,6 @@
             <common_roles>
                 <token_test_role_1 />
             </common_roles>
-        </common_roles>
+        </token>
     </user_directories>
 </clickhouse>
