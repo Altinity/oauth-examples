@@ -10,7 +10,7 @@
             <processor>azuure</processor>
             <common_roles>
                 <token_test_role_1 />
-            </roles>
+            </common_roles>
         </common_roles>
     </user_directories>
 </clickhouse>
