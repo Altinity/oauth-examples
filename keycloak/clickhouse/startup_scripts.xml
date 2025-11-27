@@ -2,11 +2,11 @@
     <startup_scripts>
         <!-- this role will only be assigned to one user -->
         <scripts>
-            <query>CREATE ROLE OR REPLACE 'can-read'</query>
+            <query>CREATE ROLE OR REPLACE 'can_read'</query>
         </scripts>
         <!-- this role will be assigned to all users defined using access token external user directory -->
         <scripts>
-            <query>CREATE ROLE OR REPLACE 'general-role'</query>
+            <query>CREATE ROLE OR REPLACE 'general_role'</query>
         </scripts>
 
         <scripts>
@@ -24,10 +24,10 @@
         </scripts>
 
         <scripts>
-            <query>GRANT SELECT ON default.can_read_specific TO 'can-read'</query>
+            <query>GRANT SELECT ON default.can_read_specific TO 'can_read'</query>
         </scripts>
         <scripts>
-            <query>GRANT SELECT ON default.can_read_general TO 'general-role'</query>
+            <query>GRANT SELECT ON default.can_read_general TO 'general_role'</query>
         </scripts>
     </startup_scripts>
 </clickhouse>
