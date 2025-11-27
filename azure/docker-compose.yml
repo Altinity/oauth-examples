@@ -1,7 +1,7 @@
 services:
   clickhouse:
     env_file: ".env"
-    image: altinityinfra/clickhouse-server:920-25.6.5.20388.altinityantalya
+    image: 	altinityinfra/clickhouse-server:1078-25.8.9.20499.altinityantalya
     ports:
       - "8123:8123"
     volumes:
