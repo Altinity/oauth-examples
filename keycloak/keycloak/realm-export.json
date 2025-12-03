@@ -1,6 +1,7 @@
 {
   "realm": "grafana",
   "enabled": true,
+  "sslRequired": "none",
   "clients": [
     {
       "clientId": "grafana-client",
