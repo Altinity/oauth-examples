@@ -12,7 +12,7 @@
         <token>
             <processor>keycloak</processor>
             <common_roles>
-                <general-role />
+                <general_role />
             </common_roles>
             <roles_transform>s/-/_/g</roles_transform>
         </token>
