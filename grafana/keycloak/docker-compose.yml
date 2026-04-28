@@ -25,6 +25,7 @@ services:
       - ./clickhouse/clickhouse-low-ram-user-profile.xml:/etc/clickhouse-server/users.d/clickhouse-low-ram-user-profile.xml:ro
       - ./clickhouse/startup_scripts.xml:/etc/clickhouse-server/config.d/startup_scripts.xml:ro
       - ./clickhouse/processor_directory.xml:/etc/clickhouse-server/config.d/processor_directory.xml:ro
+      - ./clickhouse/session-log.xml:/etc/clickhouse-server/config.d/session-log.xml:ro
     mem_limit: 4000M
     cpus: 2.0
     depends_on:
@@ -38,6 +39,7 @@ services:
       - GF_AUTH_GENERIC_OAUTH_ENABLED=true
       - GF_AUTH_GENERIC_OAUTH_NAME=Keycloak
       - GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP=true
+      - GF_AUTH_GENERIC_OAUTH_USE_REFRESH_TOKEN=true
       - GF_AUTH_GENERIC_OAUTH_CLIENT_ID=grafana-client
       - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=grafana-secret
       - GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email
