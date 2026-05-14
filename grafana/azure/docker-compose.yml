@@ -1,7 +1,7 @@
 services:
   clickhouse:
     env_file: ".env"
-    image: 	altinityinfra/clickhouse-server:1078-25.8.9.20499.altinityantalya
+    image: altinityinfra/clickhouse-server:1784-26.3.10.20001.altinityantalya
     ports:
       - "8123:8123"
     volumes:
@@ -25,7 +25,7 @@ services:
       - GF_AUTH_AZUREAD_ENABLED=true
       - GF_AUTH_AZUREAD_CLIENT_ID=${CLIENT_ID}
       - GF_AUTH_AZUREAD_CLIENT_SECRET=${CLIENT_SECRET}
-      - GF_AUTH_AZUREAD_SCOPES=openid profile email User.Read GroupMember.Read.All
+      - GF_AUTH_AZUREAD_SCOPES=openid email profile offline_access api://00000000-0000-0000-0000-000000000000/user_impersonation
       - GF_AUTH_AZUREAD_AUTH_URL=https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize
       - GF_AUTH_AZUREAD_TOKEN_URL=https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token
       - GF_AUTH_AZUREAD_ROLE_ATTRIBUTE_STRICT=false

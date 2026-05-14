@@ -1,8 +1,9 @@
 <clickhouse>
     <token_processors>
         <azuure>
-            <type>azure</type>
-            <token_cache_lifetime>60</token_cache_lifetime>
+            <type>entra</type>
+            <tenant_id>00000000-0000-0000-0000-000000000000</tenant_id>
+	        <username_claim>email</username_claim>
         </azuure>
     </token_processors>
     <user_directories>
