@@ -16,7 +16,7 @@ services:
       retries: 20
 
   clickhouse:
-    image: 	altinity/clickhouse-server:25.8.16.20001.altinityantalya   # TODO: always check for a newer version
+    image:  altinityinfra/clickhouse-server:1784-26.3.10.20001.altinityantalya  # TODO: always check for a newer version
     ports:
       - "8123:8123"
     volumes:
