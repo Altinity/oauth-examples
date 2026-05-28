@@ -1,0 +1,33 @@
+<clickhouse>
+    <!--
+      Keycloak JWT processor used as an external authenticator only.
+      No user_directories/token block, so ClickHouse will not auto-provision
+      users from the JWT. Only users pre-created in startup_scripts.xml with
+      a 'jwt' auth method can log in with a bearer token from Keycloak.
+
+      jwks_uri is reachable inside the compose network as http://keycloak:8080.
+      The token's iss claim will use http://localhost:8080 because Keycloak
+      runs with hostname=localhost (so browser-side device-code URLs work);
+      ClickHouse validates signatures via jwks_uri, which is what matters here.
+    -->
+
+    <!-- Token authentication is also disabled if any token_processor fails
+         to parse — so any silently-ignored field in <token_processors> below
+         will surface as "Token authentication is disabled" at login time.
+         enable_token_auth sits at the top level of the config alongside
+         allow_no_password / allow_plaintext_password / default_password_type
+         / bcrypt_workfactor — *not* under <access_control_improvements>. -->
+    <enable_token_auth>true</enable_token_auth>
+
+    <token_processors>
+        <keycloak>
+            <!-- jwt_dynamic_jwks: validate signatures locally against keys
+                 fetched from jwks_uri. The older 'OpenID' / 'oidc' type that
+                 also accepted userinfo_endpoint + introspection_endpoint is
+                 not supported in this Antalya build. -->
+            <type>jwt_dynamic_jwks</type>
+            <jwks_uri>http://keycloak:8080/realms/ch-demo/protocol/openid-connect/certs</jwks_uri>
+            <username_claim>email</username_claim>
+        </keycloak>
+    </token_processors>
+</clickhouse>

@@ -1,0 +1,23 @@
+<clickhouse>
+    <!--
+      User creation lives here, not in users.xml, because XML element names
+      cannot contain '@' or '.' — and the demo username is e-mail shaped. The
+      CREATE USER statement is taken verbatim from CH_CREATE_USER_QUERY,
+      built in docker-compose.yml from $CH_USERNAME. The IDENTIFIED clause
+      lists both ldap and jwt so the same user can authenticate either way.
+    -->
+    <startup_scripts>
+        <scripts>
+            <query>CREATE ROLE OR REPLACE ldap_or_jwt_role</query>
+        </scripts>
+        <scripts>
+            <query>GRANT SELECT ON default.* TO ldap_or_jwt_role</query>
+        </scripts>
+        <scripts>
+            <query>CREATE TABLE IF NOT EXISTS default.test_table_1 ENGINE=TinyLog AS SELECT toUInt64(123) AS id</query>
+        </scripts>
+        <scripts>
+            <query from_env="CH_CREATE_USER_QUERY"></query>
+        </scripts>
+    </startup_scripts>
+</clickhouse>

@@ -1,0 +1,18 @@
+<clickhouse>
+    <!--
+      Azure Entra JWT processor used as an external authenticator only.
+      Unlike grafana/azure/, this file deliberately does NOT define a
+      <user_directories><token>...</token></user_directories> block, so
+      ClickHouse will not auto-provision users from the JWT.
+
+      Only users that have been pre-created (see startup_scripts.template.xml)
+      with a jwt authentication method can authenticate with a bearer token.
+    -->
+    <token_processors>
+        <azure>
+            <type>entra</type>
+            <tenant_id from_env="AZURE_TENANT_ID"></tenant_id>
+            <username_claim>email</username_claim>
+        </azure>
+    </token_processors>
+</clickhouse>

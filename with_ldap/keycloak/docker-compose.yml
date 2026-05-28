@@ -1,0 +1,71 @@
+services:
+  openldap:
+    image: bitnamilegacy/openldap:2.6.10-debian-12-r4
+    environment:
+      LDAP_ROOT: "dc=example,dc=org"
+      LDAP_ADMIN_USERNAME: "admin"
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD:-adminpassword}"
+      LDAP_USERS: "${CH_USERNAME}"
+      LDAP_PASSWORDS: "${LDAP_USER_PASSWORD:-ldappassword}"
+      LDAP_SKIP_DEFAULT_TREE: "no"
+    ports:
+      - "1389:1389"
+    volumes:
+      - openldap-data:/bitnami/openldap
+
+  keycloak:
+    image: keycloak/keycloak:26.3
+    # --hostname=localhost so the device-code verification_uri Keycloak emits
+    # is browser-reachable from your laptop. Internal service-to-service calls
+    # still use http://keycloak:8080 via Docker DNS.
+    command: start-dev --import-realm --hostname=localhost
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak-config:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 5s
+      timeout: 30s
+      retries: 20
+
+  clickhouse:
+    # 1809-* is the PR build that introduces clickhouse-client --jwt-command;
+    # bump to a release tag once Antalya cuts one that includes it.
+    image: altinityinfra/clickhouse-server:1809-26.3.10.20001.altinityantalya
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CH_USERNAME: "${CH_USERNAME}"
+      # CH XML can't interpolate ${VAR} inside text, only fetch a whole element
+      # via from_env. So we build the full CREATE USER query here; startup_scripts.xml
+      # pulls it in with <query from_env="CH_CREATE_USER_QUERY">.
+      CH_CREATE_USER_QUERY: "CREATE USER OR REPLACE `${CH_USERNAME}` IDENTIFIED WITH ldap SERVER 'local_ldap', jwt DEFAULT ROLE ldap_or_jwt_role"
+      # Credentials the keycloak-jwt.sh script uses to request a token via the
+      # Resource Owner Password Credentials grant. KEYCLOAK_USERNAME must equal
+      # CH_USERNAME so the email claim in the issued JWT matches the CH user.
+      KEYCLOAK_USERNAME: "${CH_USERNAME}"
+      KEYCLOAK_PASSWORD: "${KEYCLOAK_PASSWORD:-demo}"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse-config/clickhouse-low-ram-config.xml:/etc/clickhouse-server/config.d/clickhouse-low-ram-config.xml:ro
+      - ./clickhouse-config/clickhouse-low-ram-user-profile.xml:/etc/clickhouse-server/users.d/clickhouse-low-ram-user-profile.xml:ro
+      - ./clickhouse-config/ldap_servers.xml:/etc/clickhouse-server/config.d/ldap_servers.xml:ro
+      - ./clickhouse-config/jwt_processors.xml:/etc/clickhouse-server/config.d/jwt_processors.xml:ro
+      - ./clickhouse-config/startup_scripts.xml:/etc/clickhouse-server/config.d/startup_scripts.xml:ro
+      - ./keycloak-jwt.sh:/usr/local/bin/keycloak-jwt.sh:ro
+    mem_limit: 4000M
+    cpus: 2.0
+    depends_on:
+      openldap:
+        condition: service_started
+      keycloak:
+        condition: service_healthy
+
+volumes:
+  clickhouse-data:
+  openldap-data:

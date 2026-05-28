@@ -1,0 +1,19 @@
+<clickhouse>
+    <!--
+      Local LDAP server used as an external authenticator.
+      The {user_name} placeholder is replaced by ClickHouse with the username
+      the client sent when binding to the LDAP server.
+
+      bitnamilegacy/openldap creates users under ou=users,${LDAP_ROOT} and
+      listens on 1389 (non-TLS) by default.
+    -->
+    <ldap_servers>
+        <local_ldap>
+            <host>openldap</host>
+            <port>1389</port>
+            <bind_dn>cn={user_name},ou=users,dc=example,dc=org</bind_dn>
+            <enable_tls>no</enable_tls>
+            <verification_cooldown>0</verification_cooldown>
+        </local_ldap>
+    </ldap_servers>
+</clickhouse>
