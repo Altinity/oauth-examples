@@ -1,9 +1,10 @@
 <clickhouse>
     <!--
-      User creation lives here, not in users.xml, because XML element names
-      cannot contain '@' or '.' — and Azure usernames are usually e-mail / UPN
-      style. The CREATE USER statement is taken verbatim from the env var
-      CH_CREATE_USER_QUERY (built in docker-compose.yml from $CH_USERNAME).
+      We don't pre-create CH users here — jwt_processors.xml has a
+      <user_directories><token>...</token></user_directories> block that
+      auto-provisions a user for whoever signs in (named after the JWT
+      'email' claim) and assigns them azure_jwt_role. We just need the
+      role itself to exist.
     -->
     <startup_scripts>
         <scripts>
@@ -14,9 +15,6 @@
         </scripts>
         <scripts>
             <query>CREATE TABLE IF NOT EXISTS default.test_table_1 ENGINE=TinyLog AS SELECT toUInt64(123) AS id</query>
-        </scripts>
-        <scripts>
-            <query from_env="CH_CREATE_USER_QUERY"></query>
         </scripts>
     </startup_scripts>
 </clickhouse>

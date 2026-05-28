@@ -1,13 +1,23 @@
 <clickhouse>
     <!--
-      Azure Entra JWT processor used as an external authenticator only.
-      Unlike grafana/azure/, this file deliberately does NOT define a
-      <user_directories><token>...</token></user_directories> block, so
-      ClickHouse will not auto-provision users from the JWT.
+      Azure Entra JWT processor + token-based user directory.
 
-      Only users that have been pre-created (see startup_scripts.template.xml)
-      with a jwt authentication method can authenticate with a bearer token.
+      The user_directories/token block makes ClickHouse auto-provision a
+      user named after the JWT's username_claim (here: 'email') on first
+      successful login, and assign them every role listed in common_roles.
+      So any Azure user in $AZURE_TENANT_ID can sign in with this image's
+      jwt-command client — no pre-created CH user needed.
+
+      Signature validation is scoped to our tenant by jwks_uri (built from
+      tenant_id), so tokens issued by any *other* Azure tenant won't pass.
     -->
+
+    <!-- Antalya build gates all token authentication behind this top-level
+         master switch (alongside allow_no_password / allow_plaintext_password
+         / default_password_type / bcrypt_workfactor); without it, the server
+         rejects every JWT with "Token authentication is disabled". -->
+    <enable_token_auth>true</enable_token_auth>
+
     <token_processors>
         <azure>
             <type>entra</type>
@@ -15,4 +25,13 @@
             <username_claim>email</username_claim>
         </azure>
     </token_processors>
+
+    <user_directories>
+        <token>
+            <processor>azure</processor>
+            <common_roles>
+                <azure_jwt_role />
+            </common_roles>
+        </token>
+    </user_directories>
 </clickhouse>
