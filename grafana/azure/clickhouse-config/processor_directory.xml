@@ -2,7 +2,7 @@
     <token_processors>
         <azuure>
             <type>entra</type>
-            <tenant_id>00000000-0000-0000-0000-000000000000</tenant_id>
+            <tenant_id from_env="TENANT_ID"></tenant_id>
 	        <username_claim>email</username_claim>
         </azuure>
     </token_processors>
