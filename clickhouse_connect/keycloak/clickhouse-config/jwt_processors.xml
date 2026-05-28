@@ -1,0 +1,44 @@
+<clickhouse>
+    <!--
+      Keycloak JWT processor + token-based user_directory.
+
+      user_directories/token makes ClickHouse auto-provision a user named
+      after the JWT's username_claim ('email' here) on first successful
+      login, and assign every role in <common_roles>. So any Keycloak user
+      in the ch-demo realm can sign in via Python with a fresh JWT — no
+      pre-created CH user, no startup_scripts CREATE USER step.
+
+      Signature validation is scoped to this realm by jwks_uri, which is
+      reachable inside the compose network as http://keycloak:8080.
+      Tokens' iss claim will use http://localhost:8080 because Keycloak
+      runs with hostname=localhost (so browser-side flows would work too);
+      ClickHouse validates via jwks_uri, which is what matters here.
+    -->
+
+    <!-- Antalya gates all token authentication behind this top-level switch
+         (alongside allow_no_password / allow_plaintext_password /
+         default_password_type / bcrypt_workfactor) — without it, the server
+         rejects every JWT with "Token authentication is disabled". -->
+    <enable_token_auth>true</enable_token_auth>
+
+    <token_processors>
+        <keycloak>
+            <!-- jwt_dynamic_jwks: validate signatures locally against keys
+                 fetched from jwks_uri. The older 'OpenID'/'oidc' processor
+                 type that also accepted userinfo/introspection endpoints
+                 is not supported in this Antalya build. -->
+            <type>jwt_dynamic_jwks</type>
+            <jwks_uri>http://keycloak:8080/realms/ch-demo/protocol/openid-connect/certs</jwks_uri>
+            <username_claim>email</username_claim>
+        </keycloak>
+    </token_processors>
+
+    <user_directories>
+        <token>
+            <processor>keycloak</processor>
+            <common_roles>
+                <jwt_role />
+            </common_roles>
+        </token>
+    </user_directories>
+</clickhouse>

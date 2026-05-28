@@ -1,0 +1,43 @@
+services:
+  keycloak:
+    image: keycloak/keycloak:26.3
+    # --hostname=localhost so any browser-facing URLs Keycloak emits resolve
+    # from your laptop. Internal service-to-service calls (the JWKS fetch
+    # from ClickHouse) still use http://keycloak:8080 via Docker DNS.
+    command: start-dev --import-realm --hostname=localhost
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak-config:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 5s
+      timeout: 30s
+      retries: 20
+
+  clickhouse:
+    # Pinned to the same Antalya PR build the sibling demos use. This demo
+    # doesn't need --jwt-command (the JWT comes from app.py, not a
+    # server-spawned script) — any Antalya build with <enable_token_auth>
+    # works — but using the same image keeps all demos in lockstep.
+    image: altinityinfra/clickhouse-server:1809-26.3.10.20001.altinityantalya
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse-config/clickhouse-low-ram-config.xml:/etc/clickhouse-server/config.d/clickhouse-low-ram-config.xml:ro
+      - ./clickhouse-config/clickhouse-low-ram-user-profile.xml:/etc/clickhouse-server/users.d/clickhouse-low-ram-user-profile.xml:ro
+      - ./clickhouse-config/jwt_processors.xml:/etc/clickhouse-server/config.d/jwt_processors.xml:ro
+      - ./clickhouse-config/startup_scripts.xml:/etc/clickhouse-server/config.d/startup_scripts.xml:ro
+    mem_limit: 4000M
+    cpus: 2.0
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+volumes:
+  clickhouse-data:

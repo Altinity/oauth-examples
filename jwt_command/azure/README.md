@@ -68,4 +68,6 @@ not just trusting the `email` claim.
   role in `<common_roles>` (here: `azure_jwt_role`). No pre-created user.
 
 For a combined LDAP + IdP demo (same user, either method),
-see [`../../with_ldap/keycloak/`](../../with_ldap/keycloak/).
+see [`../../with_ldap/keycloak/`](../../with_ldap/keycloak/). For a Python
+flow that forwards a JWT through the [`clickhouse-connect`](https://github.com/ClickHouse/clickhouse-connect)
+driver's `access_token=` kwarg, see [`../../clickhouse_connect/keycloak/`](../../clickhouse_connect/keycloak/).

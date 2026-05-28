@@ -1,0 +1,19 @@
+<clickhouse>
+    <!--
+      No CREATE USER here — jwt_processors.xml has a
+      <user_directories><token>...</token></user_directories> block that
+      auto-provisions the CH user from the JWT's 'email' claim on first
+      sign-in and grants them jwt_role. We just need the role to exist.
+    -->
+    <startup_scripts>
+        <scripts>
+            <query>CREATE ROLE OR REPLACE jwt_role</query>
+        </scripts>
+        <scripts>
+            <query>GRANT SELECT ON default.* TO jwt_role</query>
+        </scripts>
+        <scripts>
+            <query>CREATE TABLE IF NOT EXISTS default.test_table_1 ENGINE=TinyLog AS SELECT toUInt64(123) AS id</query>
+        </scripts>
+    </startup_scripts>
+</clickhouse>

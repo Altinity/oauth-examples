@@ -45,7 +45,9 @@ to get an interactive shell.
   Keycloak's `/token` endpoint and prints the `id_token`. ROPC is deprecated
   for real apps (no MFA, no consent) — fine for a local demo, zero browser
   interaction. For a real device-code flow against Azure Entra, see
-  [`../../jwt_command/azure/`](../../jwt_command/azure/).
+  [`../../jwt_command/azure/`](../../jwt_command/azure/). For the same
+  Keycloak flow driven from Python through `clickhouse-connect` instead of
+  `clickhouse-client`, see [`../../clickhouse_connect/keycloak/`](../../clickhouse_connect/keycloak/).
 
 ## Endpoints
 
