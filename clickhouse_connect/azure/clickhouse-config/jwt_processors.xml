@@ -1,0 +1,15 @@
+<clickhouse>
+    <!-- Entra ACCESS-token validation; no user_directory, so only the pre-defined
+         `IDENTIFIED WITH jwt` user (init-clickhouse.sh) can log in. -->
+    <!-- master switch; without it all tokens are rejected -->
+    <enable_token_auth>true</enable_token_auth>
+
+    <token_processors>
+        <azure>
+            <type>entra</type>
+            <tenant_id from_env="AZURE_TENANT_ID"></tenant_id>
+            <expected_audience from_env="AZURE_CLIENT_ID"></expected_audience>
+            <username_claim>upn</username_claim>
+        </azure>
+    </token_processors>
+</clickhouse>

@@ -1,0 +1,22 @@
+services:
+  clickhouse:
+    image: altinityinfra/clickhouse-server:1809-26.3.10.20001.altinityantalya
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      AZURE_TENANT_ID: "${AZURE_TENANT_ID}"
+      AZURE_CLIENT_ID: "${AZURE_CLIENT_ID}"
+      # required (:?): abort before creating the once-only volume if unset
+      CH_JWT_USER: "${CH_JWT_USER:?set CH_JWT_USER in .env (= the token upn)}"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse-config/clickhouse-low-ram-config.xml:/etc/clickhouse-server/config.d/clickhouse-low-ram-config.xml:ro
+      - ./clickhouse-config/clickhouse-low-ram-user-profile.xml:/etc/clickhouse-server/users.d/clickhouse-low-ram-user-profile.xml:ro
+      - ./clickhouse-config/jwt_processors.xml:/etc/clickhouse-server/config.d/jwt_processors.xml:ro
+      - ./init-clickhouse.sh:/docker-entrypoint-initdb.d/init-clickhouse.sh:ro
+    mem_limit: 4000M
+    cpus: 2.0
+
+volumes:
+  clickhouse-data:
