@@ -1,0 +1,7 @@
+# token_provider landed in 1.2.0 (PR #775); awaiting an async provider needs
+# the aiohttp AsyncClient from the [async] extra, 1.4.0+
+clickhouse-connect[async]>=1.4.0
+# app.py imports aiohttp directly for the token POSTs
+aiohttp>=3.9
+# threads_and_processes.py uses the sync client + requests for token POSTs
+requests>=2.31

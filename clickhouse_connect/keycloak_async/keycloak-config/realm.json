@@ -1,0 +1,118 @@
+{
+  "realm": "ch-demo",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "eventsEnabled": true,
+  "enabledEventTypes": ["LOGIN", "LOGIN_ERROR", "REFRESH_TOKEN", "REFRESH_TOKEN_ERROR"],
+  "clients": [
+    {
+      "clientId": "clickhouse-client",
+      "name": "ClickHouse client",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "15"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "alice@example.com",
+      "email": "alice@example.com",
+      "firstName": "Alice",
+      "lastName": "Example",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "bob@example.com",
+      "email": "bob@example.com",
+      "firstName": "Bob",
+      "lastName": "Example",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "mallory@example.com",
+      "email": "mallory@example.com",
+      "firstName": "Mallory",
+      "lastName": "NoChUser",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "carol@example.com",
+      "email": "carol@example.com",
+      "firstName": "Carol",
+      "lastName": "WrongAudience",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "dave@example.com",
+      "email": "dave@example.com",
+      "firstName": "Dave",
+      "lastName": "RightAudience",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "erin@example.com",
+      "email": "erin@example.com",
+      "firstName": "Erin",
+      "lastName": "Deprovisioned",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

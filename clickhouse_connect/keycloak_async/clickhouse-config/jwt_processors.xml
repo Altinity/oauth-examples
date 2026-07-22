@@ -1,0 +1,23 @@
+<clickhouse>
+    <!-- Pre-defined JWT users: no <user_directories><token> block.
+         startup_scripts.xml creates the users IDENTIFIED WITH jwt; a token
+         is accepted when a processor validates its signature and the
+         username claim matches a local user. -->
+    <enable_token_auth>true</enable_token_auth>
+
+    <token_processors>
+        <keycloak>
+            <!-- validates signatures against keys fetched from jwks_uri -->
+            <type>jwt_dynamic_jwks</type>
+            <jwks_uri>http://keycloak:8080/realms/ch-demo/protocol/openid-connect/certs</jwks_uri>
+            <!-- app.py forwards ACCESS tokens; preferred_username holds the
+                 Keycloak username (an email here) -->
+            <username_claim>preferred_username</username_claim>
+            <!-- the defaults (60s leeway, 3600s cache) would mask the 15s
+                 token expiry; a cached token stays valid until the cache
+                 entry lapses, even past its exp -->
+            <verifier_leeway>0</verifier_leeway>
+            <token_cache_lifetime>10</token_cache_lifetime>
+        </keycloak>
+    </token_processors>
+</clickhouse>

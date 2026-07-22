@@ -40,3 +40,5 @@ roles: ['jwt_role']
 
 For `clickhouse-client --jwt-command` against the same Keycloak (plus an
 LDAP fallback on the same user), see [`../../with_ldap/keycloak/`](../../with_ldap/keycloak/).
+For the async client with a refreshable `token_provider` and pre-defined
+users, see [`../keycloak_async/`](../keycloak_async/).

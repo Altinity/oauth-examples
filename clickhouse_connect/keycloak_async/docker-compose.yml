@@ -1,0 +1,40 @@
+services:
+  keycloak:
+    image: keycloak/keycloak:26.3
+    # --hostname=localhost: emitted URLs resolve from the host; ClickHouse
+    # fetches the JWKS via http://keycloak:8080 (Docker DNS)
+    command: start-dev --import-realm --hostname=localhost
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      # host ports come from .env so this demo can run next to the siblings
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./keycloak-config:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 5s
+      timeout: 30s
+      retries: 20
+
+  clickhouse:
+    # Antalya build with <enable_token_auth> support
+    image: altinityinfra/clickhouse-server:1809-26.3.10.20001.altinityantalya
+    ports:
+      # HTTP only: app.py never uses the native protocol
+      - "${CLICKHOUSE_PORT:-8123}:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse-config/clickhouse-low-ram-config.xml:/etc/clickhouse-server/config.d/clickhouse-low-ram-config.xml:ro
+      - ./clickhouse-config/clickhouse-low-ram-user-profile.xml:/etc/clickhouse-server/users.d/clickhouse-low-ram-user-profile.xml:ro
+      - ./clickhouse-config/jwt_processors.xml:/etc/clickhouse-server/config.d/jwt_processors.xml:ro
+      - ./clickhouse-config/startup_scripts.xml:/etc/clickhouse-server/config.d/startup_scripts.xml:ro
+    mem_limit: 4000M
+    cpus: 2.0
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+volumes:
+  clickhouse-data:

@@ -1,0 +1,69 @@
+<clickhouse>
+    <!-- User names must match the token's preferred_username claim and
+         keycloak-config/realm.json. DEFAULT ROLE is required: without it
+         the user signs in with no active roles. -->
+    <startup_scripts>
+        <scripts>
+            <query>CREATE ROLE OR REPLACE jwt_role</query>
+        </scripts>
+        <scripts>
+            <query>GRANT SELECT ON default.* TO jwt_role</query>
+        </scripts>
+        <scripts>
+            <query>CREATE TABLE IF NOT EXISTS default.events (id UInt64, who String) ENGINE = MergeTree ORDER BY id</query>
+        </scripts>
+        <scripts>
+            <query>GRANT INSERT ON default.events TO jwt_role</query>
+        </scripts>
+        <scripts>
+            <query>CREATE USER IF NOT EXISTS `alice@example.com` IDENTIFIED WITH jwt</query>
+        </scripts>
+        <scripts>
+            <query>GRANT jwt_role TO `alice@example.com`</query>
+        </scripts>
+        <scripts>
+            <query>ALTER USER `alice@example.com` DEFAULT ROLE jwt_role</query>
+        </scripts>
+        <scripts>
+            <query>CREATE USER IF NOT EXISTS `bob@example.com` IDENTIFIED WITH jwt</query>
+        </scripts>
+        <scripts>
+            <query>GRANT jwt_role TO `bob@example.com`</query>
+        </scripts>
+        <scripts>
+            <query>ALTER USER `bob@example.com` DEFAULT ROLE jwt_role</query>
+        </scripts>
+        <!-- carol/dave exercise per-user CLAIMS checks (test_negative.py):
+             carol requires an azp our client never sends, dave the real one.
+             No CH user for mallory@example.com: her valid IdP tokens must
+             be rejected. -->
+        <scripts>
+            <query>CREATE USER IF NOT EXISTS `carol@example.com` IDENTIFIED WITH jwt CLAIMS '{"azp": "another-client"}'</query>
+        </scripts>
+        <scripts>
+            <query>GRANT jwt_role TO `carol@example.com`</query>
+        </scripts>
+        <scripts>
+            <query>ALTER USER `carol@example.com` DEFAULT ROLE jwt_role</query>
+        </scripts>
+        <scripts>
+            <query>CREATE USER IF NOT EXISTS `dave@example.com` IDENTIFIED WITH jwt CLAIMS '{"azp": "clickhouse-client"}'</query>
+        </scripts>
+        <scripts>
+            <query>GRANT jwt_role TO `dave@example.com`</query>
+        </scripts>
+        <scripts>
+            <query>ALTER USER `dave@example.com` DEFAULT ROLE jwt_role</query>
+        </scripts>
+        <!-- erin is disabled/re-enabled in Keycloak by test_deprovisioning.py -->
+        <scripts>
+            <query>CREATE USER IF NOT EXISTS `erin@example.com` IDENTIFIED WITH jwt</query>
+        </scripts>
+        <scripts>
+            <query>GRANT jwt_role TO `erin@example.com`</query>
+        </scripts>
+        <scripts>
+            <query>ALTER USER `erin@example.com` DEFAULT ROLE jwt_role</query>
+        </scripts>
+    </startup_scripts>
+</clickhouse>

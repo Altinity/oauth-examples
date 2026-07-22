@@ -44,4 +44,6 @@ v2.0 manifest) yields a token whose `aud` is this app and that `entra` can verif
 ## Related
 
 - [`../keycloak/`](../keycloak/) — same driver, static `access_token=`.
+- [`../keycloak_async/`](../keycloak_async/) — async client, async
+  refreshable `token_provider`, parallel/expiry test scenarios.
 - [`../../jwt_command/azure/`](../../jwt_command/azure/) — `--jwt-command` + auto-provisioning.
