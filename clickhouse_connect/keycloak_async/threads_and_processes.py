@@ -3,11 +3,16 @@ Threads and processes querying ClickHouse through the sync clickhouse-connect
 client while the token expires and refreshes mid-run.
 
 The async provider in app.py is event-loop-bound; sync clients running in
-threads need a threading.Lock-based provider instead. clickhouse-connect
-requires a separate client instance per thread/process; the provider is the
-shared piece (threads share the instance, processes share the refresh token).
+threads need a threading.Lock-based provider instead. A single sync client
+can be shared across threads (scenario C) as long as session IDs are off;
+with sessions on you need a client per thread (scenario T). Processes always
+need their own client. The provider is the shared piece throughout (threads
+share the instance, processes share the refresh token).
 
 Scenarios (`python threads_and_processes.py`):
+  C. shared-client — one provider AND one client shared by every thread
+                 (autogenerate_session_id=False); concurrent queries overlap
+                 on the one client and the expiry burst yields one refresh
   T. threads   — one thread-safe provider, one client per thread; queries
                  keep running across an expiry; the 516 burst from all
                  threads yields one refresh grant
@@ -180,6 +185,74 @@ def wait_for_expiry(provider: ThreadSafeTokenProvider,
     time.sleep(max(wait, 0))
 
 
+def scenario_shared_client(n_threads: int = 8, n_queries: int = 3) -> None:
+    """One client shared by every thread (not one per thread), expiry mid-run.
+
+    A single sync client is safe to share across threads only with
+    autogenerate_session_id=False. By default a sync client stamps every
+    request with one generated session_id, and the driver rejects a second
+    concurrent query on that session with ProgrammingError ("Attempt to
+    execute concurrent queries within the same session"). With no session_id
+    the queries run concurrently over the client's own connection pool.
+
+    Auth is unaffected by sharing: each request copies the client's headers,
+    and on a 516 the driver calls the (single-flight) provider and updates the
+    shared Bearer header — so the whole burst still collapses into one refresh.
+    """
+    print(f"\n[C] shared-client: {n_threads} threads on ONE shared client")
+    provider = ThreadSafeTokenProvider(KEYCLOAK_USERNAME, KEYCLOAK_PASSWORD)
+    client = clickhouse_connect.get_client(
+        host=CH_HOST, port=CH_PORT, token_provider=provider,
+        autogenerate_session_id=False)  # required to share one client
+    try:
+        assert provider.counters["password_grants"] == 1, provider.counters
+
+        def worker(_: int) -> list:
+            return [client.query("SELECT currentUser(), sleep(0.2)").result_rows[0][0]
+                    for _ in range(n_queries)]
+
+        before = provider.counters.copy()
+        started = time.monotonic()
+        with ThreadPoolExecutor(n_threads) as pool:
+            results = list(pool.map(worker, range(n_threads)))
+        elapsed = time.monotonic() - started
+        assert all(user == KEYCLOAK_USERNAME
+                   for users in results for user in users)
+        assert provider.counters == before, \
+            f"unexpected token activity: {dict(provider.counters)}"
+        # each query sleeps 0.2s server-side; fully serial would be
+        # n_threads * n_queries * 0.2s — overlap on one client is far quicker
+        total = n_threads * n_queries
+        assert elapsed < total * 0.2 * 0.6, \
+            f"queries did not overlap on the shared client ({elapsed:.1f}s)"
+        print(f"    OK: {total} queries overlapped on one client "
+              f"in {elapsed:.1f}s, no extra token fetches")
+
+        wait_for_expiry(provider)
+
+        before = provider.counters.copy()
+        # 2s slack: Keycloak stamps events with its own clock
+        since = int(time.time() * 1000) - 2000
+        with ThreadPoolExecutor(n_threads) as pool:
+            futures = [pool.submit(worker, i) for i in range(n_threads)]
+        failures = [f.exception() for f in futures if f.exception() is not None]
+        assert not failures, (f"{len(failures)}/{len(futures)} threads failed "
+                              f"to recover; first: {failures[0]!r}")
+        assert all(user == KEYCLOAK_USERNAME
+                   for f in futures for user in f.result())
+        delta_refresh = provider.counters["refresh_grants"] - before["refresh_grants"]
+        delta_password = provider.counters["password_grants"] - before["password_grants"]
+        assert delta_refresh == 1, f"expected exactly 1 refresh grant, got {delta_refresh}"
+        assert delta_password == 0, "re-auth must not happen while the refresh token is valid"
+        assert_idp_saw(since, refreshes=1)
+        print(f"    counters: {dict(provider.counters)}")
+        print(f"    OK: {n_threads} threads on one client recovered -> "
+              "1 refresh grant (confirmed by Keycloak's event log)")
+    finally:
+        with contextlib.suppress(Exception):
+            client.close()
+
+
 def scenario_threads(n_threads: int = 8, n_queries: int = 4) -> None:
     """One shared provider, one client per thread, expiry mid-run."""
     print(f"\n[T] threads: {n_threads} threads, one shared provider")
@@ -279,6 +352,7 @@ def scenario_processes(n_procs: int = 3) -> None:
 
 
 def main() -> None:
+    scenario_shared_client()
     scenario_threads()
     scenario_processes()
     print("\nall scenarios passed")

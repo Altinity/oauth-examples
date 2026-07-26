@@ -85,7 +85,8 @@ it is not a default event type).
 | User de-provisioned in the IdP mid-session | `test_deprovisioning.py` |
 | Connection pooling — shared provider/token; same token across clients | `app.py` 4 |
 | Connection pooling — unique token per client | `app.py` 7 |
-| High concurrency across threads / processes | `threads_and_processes.py` |
+| One client shared across many threads (sessions off) | `threads_and_processes.py` C |
+| High concurrency across threads / processes | `threads_and_processes.py` T, P |
 | Query in flight while the token expires | `app.py` 6 |
 
 ## Does Keycloak support the refresh-token flow?
@@ -139,7 +140,7 @@ except where noted):
 python app.py                  # 7 async scenarios              ~2min
 python test_provider.py        # offline provider unit tests     ~2s   (no stack needed)
 python test_negative.py        # rejected-token paths            ~45s
-python threads_and_processes.py# sync threads + processes        ~50s
+python threads_and_processes.py# sync shared-client/threads/procs ~60s
 python test_long_running.py    # session across refresh cycles   ~1min (LONG_RUNNING_CYCLES=N to extend)
 python test_deprovisioning.py  # IdP de-provisioning + recovery  ~25s
 ```
@@ -183,12 +184,23 @@ driver's executor-thread invocation style.
 ## Threads and processes
 
 [`threads_and_processes.py`](threads_and_processes.py) covers the same
-expiry/refresh events for the **sync** client (clickhouse-connect requires a
-separate client instance per thread/process):
+expiry/refresh events for the **sync** client:
 
-- **threads** — a `threading.Lock`-based `ThreadSafeTokenProvider` shared by
-  8 per-thread clients; queries keep running across an expiry, and the
-  combined 516 burst yields exactly one refresh grant;
+- **shared-client** — one `ThreadSafeTokenProvider` *and* one client shared by
+  8 threads. A single sync client is safe to share across threads only with
+  `autogenerate_session_id=False`: by default a sync client stamps every
+  request with one generated session ID, and the driver rejects a second
+  concurrent query on that session with `ProgrammingError` ("Attempt to
+  execute concurrent queries within the same session"). With sessions off the
+  queries overlap on the client's own connection pool, and the expiry burst
+  from all threads still collapses into a single refresh grant (each request
+  copies the shared Bearer header, and the single-flight provider refreshes it
+  once);
+- **threads** — the client-per-thread variant (needed when you *do* want
+  sessions, e.g. temporary tables): a `threading.Lock`-based
+  `ThreadSafeTokenProvider` shared by 8 per-thread clients; queries keep
+  running across an expiry, and the combined 516 burst yields exactly one
+  refresh grant;
 - **processes** — 3 child processes each get their own provider seeded with
   the parent's refresh token; every process survives the expiry with exactly
   one refresh grant and no password re-auth. This relies on refresh-token
