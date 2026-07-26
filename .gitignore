@@ -43,3 +43,4 @@
 
 # Python
 __pycache__/
+.venv/
