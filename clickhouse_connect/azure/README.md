@@ -35,6 +35,23 @@ Expected: `currentUser(): you@example.com`. Tokens cache at
 user is created on first init only, so after changing `CH_JWT_USER` re-provision
 with `docker compose down -v && docker compose up -d`.
 
+## Sign-in options
+
+All three feed the same `token_provider` an Entra access token; pick the flow that
+fits how the app runs:
+
+- `app.py` — **device-code** (default above). No browser on the host; sign in on
+  any device from the printed code. Best for headless/remote shells.
+- `interactive.py` — **authorization-code + PKCE**, hand-rolled with `requests`
+  (no MSAL). Opens a browser, captures the redirect on a one-shot localhost
+  server, and the `token_provider` manages the access/refresh tokens itself.
+  This is the pure equivalent of
+  [MSAL's `interactive_sample.py`](https://github.com/AzureAD/microsoft-authentication-library-for-python/blob/dev/sample/interactive_sample.py).
+  Supports a confidential app via `AZURE_CLIENT_SECRET`.
+- `confidential_client.py` — **client-credentials** (app identity, no user, no
+  browser). Uses the `entra` processor with a token `user_directory` that
+  auto-provisions a user from the SP object id. For daemons/services.
+
 ## Why an access token, not an id_token?
 
 ClickHouse is the *resource*. An `openid email profile` token is Graph-audience
