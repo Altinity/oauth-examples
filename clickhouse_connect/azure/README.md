@@ -24,8 +24,9 @@ Full walkthrough: [`../../grafana/azure/Entra_setup.md`](../../grafana/azure/Ent
 cp .env.example .env      # set AZURE_TENANT_ID, AZURE_CLIENT_ID, CH_JWT_USER (= your upn)
 docker compose up -d
 
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+# clickhouse-connect >= 1.2 needs Python >= 3.10; macOS system python3 is 3.9
+uv venv --python 3.14 .venv && source .venv/bin/activate
+uv pip install -r requirements.txt
 set -a; source .env; set +a
 python app.py             # first run prints a device-code prompt; sign in once
 ```

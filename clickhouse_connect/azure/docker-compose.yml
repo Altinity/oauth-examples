@@ -1,6 +1,6 @@
 services:
   clickhouse:
-    image: altinityinfra/clickhouse-server:1809-26.3.10.20001.altinityantalya
+    image: altinity/clickhouse-server:26.3.13.20001.altinityantalya
     ports:
       - "8123:8123"
       - "9000:9000"
