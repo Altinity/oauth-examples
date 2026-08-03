@@ -1,0 +1,39 @@
+# Explicit project name: every azure/ directory in this repo would otherwise
+# default to the project "azure" and share containers and volumes.
+name: clickhouse-client-azure
+
+services:
+  clickhouse:
+    # released Antalya build; carries clickhouse-client --jwt-command
+    image: altinity/clickhouse-server:26.3.13.20001.altinityantalya
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+      # azure-interactive.sh listens here for the sign-in redirect. The script
+      # runs inside this container while the browser runs on the host, so the
+      # port has to be published for the redirect to arrive.
+      - "8400:8400"
+    environment:
+      AZURE_TENANT_ID: "${AZURE_TENANT_ID}"
+      AZURE_CLIENT_ID: "${AZURE_CLIENT_ID}"
+      # Required by azure-client-credentials.sh. azure-interactive.sh ignores it
+      # unless AZURE_INTERACTIVE_USE_SECRET=1, since sending a secret for a
+      # public "Mobile and desktop applications" redirect URI is a 401.
+      AZURE_CLIENT_SECRET: "${AZURE_CLIENT_SECRET:-}"
+      AZURE_INTERACTIVE_USE_SECRET: "${AZURE_INTERACTIVE_USE_SECRET:-0}"
+      AZURE_REDIRECT_URI: "${AZURE_REDIRECT_URI:-http://localhost:8400/}"
+      # required (:?): abort before creating the once-only volume if unset
+      CH_JWT_USER: "${CH_JWT_USER:?set CH_JWT_USER in .env (= the token upn)}"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse-config/clickhouse-low-ram-config.xml:/etc/clickhouse-server/config.d/clickhouse-low-ram-config.xml:ro
+      - ./clickhouse-config/clickhouse-low-ram-user-profile.xml:/etc/clickhouse-server/users.d/clickhouse-low-ram-user-profile.xml:ro
+      - ./clickhouse-config/jwt_processors.xml:/etc/clickhouse-server/config.d/jwt_processors.xml:ro
+      - ./init-clickhouse.sh:/docker-entrypoint-initdb.d/init-clickhouse.sh:ro
+      - ./azure-interactive.sh:/usr/local/bin/azure-interactive.sh:ro
+      - ./azure-client-credentials.sh:/usr/local/bin/azure-client-credentials.sh:ro
+    mem_limit: 4000M
+    cpus: 2.0
+
+volumes:
+  clickhouse-data:

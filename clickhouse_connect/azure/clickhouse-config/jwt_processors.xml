@@ -10,8 +10,13 @@
         <!-- Delegated tokens (app.py, interactive.py, web_app.py). No
              user_directory is bound to this processor, so only the pre-defined
              `IDENTIFIED WITH jwt` user (init-clickhouse.sh) can log in.
-             Listed first: a delegated token also carries `oid`, and whichever
-             processor resolves it decides the ClickHouse username. -->
+             A delegated token carries BOTH `upn` and `oid`, so the processor
+             that resolves it first decides the ClickHouse username — and
+             precedence follows the processor NAME's sort order, not the order
+             written here. `azure` sorts before `azure_app`, which is what keeps
+             delegated tokens on the pre-defined user. Renaming this to anything
+             sorting after `azure_app` silently breaks that. -->
+
         <azure>
             <type>entra</type>
             <tenant_id from_env="AZURE_TENANT_ID"></tenant_id>

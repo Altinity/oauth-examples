@@ -122,11 +122,16 @@ pre-defined CH user is created on first init only, so after changing
 because the two token shapes carry different identity claims:
 
 - `azure` — `username_claim=upn`, no user directory. Delegated tokens map to the
-  pre-defined `IDENTIFIED WITH jwt` user from `init-clickhouse.sh`. Listed
-  first, since a delegated token also carries `oid`.
+  pre-defined `IDENTIFIED WITH jwt` user from `init-clickhouse.sh`.
 - `azure_app` — `username_claim=oid`, with a `<user_directories><token>` bound
   to it. App-only tokens have no `upn`, so the service principal is
   auto-provisioned on first login and granted `azure_jwt_role`.
+
+A delegated token carries **both** `upn` and `oid`, so which processor resolves
+it first decides the username — and precedence follows the processor **name's
+sort order**, not the order in the file. `azure` sorts before `azure_app`, which
+is what keeps delegated tokens on the pre-defined user; a name sorting after
+`azure_app` would silently auto-provision an `oid`-named user instead.
 
 ## Why an access token, not an id_token?
 
