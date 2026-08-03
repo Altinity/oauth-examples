@@ -174,8 +174,10 @@ def renew(tokens):
         try:
             return refresh(refresh_token)
         except requests.HTTPError as exc:
-            # only a dead / interaction-required token warrants re-auth; else transient
-            if oauth_error(exc.response) not in ("invalid_grant", "interaction_required"):
+            # a dead token, or a cached one minted under the other client-auth
+            # mode (invalid_client), needs a fresh sign-in; else transient
+            if oauth_error(exc.response) not in (
+                    "invalid_grant", "interaction_required", "invalid_client"):
                 raise RuntimeError(f"token refresh failed, retry later: {exc}") from exc
         except requests.RequestException as exc:
             raise RuntimeError(f"token refresh failed (network), retry later: {exc}") from exc

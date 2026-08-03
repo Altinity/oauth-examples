@@ -1,15 +1,44 @@
 <clickhouse>
-    <!-- Entra ACCESS-token validation; no user_directory, so only the pre-defined
-         `IDENTIFIED WITH jwt` user (init-clickhouse.sh) can log in. -->
+    <!-- Entra ACCESS-token validation for the two token shapes this directory
+         demonstrates. Delegated (user) tokens carry `upn`; app-only
+         (client-credentials) tokens carry no `upn` at all, only `oid` — the
+         service principal's object id — so they need their own processor. -->
     <!-- master switch; without it all tokens are rejected -->
     <enable_token_auth>true</enable_token_auth>
 
     <token_processors>
+        <!-- Delegated tokens (app.py, interactive.py, web_app.py). No
+             user_directory is bound to this processor, so only the pre-defined
+             `IDENTIFIED WITH jwt` user (init-clickhouse.sh) can log in.
+             Listed first: a delegated token also carries `oid`, and whichever
+             processor resolves it decides the ClickHouse username. -->
         <azure>
             <type>entra</type>
             <tenant_id from_env="AZURE_TENANT_ID"></tenant_id>
             <expected_audience from_env="AZURE_CLIENT_ID"></expected_audience>
             <username_claim>upn</username_claim>
         </azure>
+        <!-- App-only tokens (confidential_client.py). No user to name the
+             ClickHouse user after, so `oid` is the identity. -->
+        <azure_app>
+            <type>entra</type>
+            <tenant_id from_env="AZURE_TENANT_ID"></tenant_id>
+            <expected_audience from_env="AZURE_CLIENT_ID"></expected_audience>
+            <username_claim>oid</username_claim>
+        </azure_app>
     </token_processors>
+
+    <!-- Merges into config.xml's own user_directories (users_xml +
+         local_directory), so the pre-defined user and `default` still work.
+         Bound to azure_app only: an app token auto-provisions a user named
+         after the service principal's oid, while delegated tokens keep
+         needing the pre-defined CH_JWT_USER. -->
+    <user_directories>
+        <token>
+            <processor>azure_app</processor>
+            <common_roles>
+                <azure_jwt_role />
+            </common_roles>
+        </token>
+    </user_directories>
 </clickhouse>

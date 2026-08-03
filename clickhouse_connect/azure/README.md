@@ -1,22 +1,89 @@
 # `clickhouse-connect` + Azure Entra, refreshable access token
 
-A Python script signs in to Azure (device-code) once, then gives
+Python scripts sign in to Azure Entra, then give
 [`clickhouse-connect`](https://github.com/ClickHouse/clickhouse-connect) a
 **`token_provider`** callable (driver 1.2.0+,
 [PR #775](https://github.com/ClickHouse/clickhouse-connect/pull/775)) that
-forwards an **access token** and silently renews it via the refresh token — the
-driver re-invokes the callable whenever ClickHouse rejects the current token.
-ClickHouse validates the token with the `entra` processor and authenticates a
-pre-defined `IDENTIFIED WITH jwt` user, identity taken from the `upn` claim.
+forwards an **access token** and silently renews it — the driver re-invokes the
+callable whenever ClickHouse rejects the current token. ClickHouse validates the
+token with the `entra` processor and maps it to a ClickHouse user.
+
+## Scenarios
+
+Named after the [MSAL Python
+samples](https://github.com/AzureAD/microsoft-authentication-library-for-python/tree/dev/sample),
+though each script hand-rolls the flow with `requests` instead of using MSAL.
+
+| Scenario | Script | Azure client | ClickHouse identity |
+| --- | --- | --- | --- |
+| **Public client, interactive** (`interactive_sample.py`) | `interactive.py` | no secret; auth code + PKCE, browser redirect to a one-shot localhost server | pre-defined `CH_JWT_USER`, from `upn` |
+| **Confidential client, headless** (`confidential_client_sample.py`) | `confidential_client.py` | client secret; client-credentials, no user | auto-provisioned, from the service principal's `oid` |
+| **Confidential client, web app** (`authorization-code-flow-sample`) | `web_app.py` | client secret; auth code + PKCE, delegated user access, per-user sessions | pre-defined `CH_JWT_USER`, from `upn` |
+| Device code (no MSAL counterpart here) | `app.py` | no secret; sign in from any device | pre-defined `CH_JWT_USER`, from `upn` |
+
+`interactive.py` also covers the confidential *desktop* variant: set
+`AZURE_CLIENT_SECRET` and it authenticates the client on the code and refresh
+exchanges too — this is what avoids AADSTS7000218 (`must contain
+'client_assertion' or 'client_secret'`), the error MSAL's public-client
+`interactive_sample.py` hits against a confidential app.
 
 ## Azure app registration
 
-- **Public client** (*Allow public client flows* = Yes) — device-code, no secret.
+One registration serves all four scripts.
+
 - **Expose an API** (Application ID URI + a scope) — so it can issue a token for itself.
 - **`requestedAccessTokenVersion: 2`** in the manifest — else v1.0 tokens are rejected.
-- **`upn`** present in the access token.
+- **`upn`** present in the access token (the three delegated flows).
+- *Authentication → Allow public client flows* = **Yes** — device code and
+  secretless `interactive.py`.
+- *Certificates & secrets* → a **client secret** — `confidential_client.py`, `web_app.py`.
+- Redirect URIs — see below.
 
 Full walkthrough: [`../../grafana/azure/Entra_setup.md`](../../grafana/azure/Entra_setup.md).
+
+### Redirect URIs
+
+Azure never returns the authorization code to the program directly: it redirects
+the *browser* to a URL registered in advance, with `?code=...&state=...`. Only
+the two browser flows need one.
+
+| Script | Redirect URI | Register under | Override with |
+| --- | --- | --- | --- |
+| `interactive.py` | `http://localhost:8400/` | **Mobile and desktop applications** | `AZURE_REDIRECT_URI` |
+| `web_app.py` | `http://localhost:8500/auth/callback` | **Web** | `AZURE_WEB_REDIRECT_URI` (+ `WEB_APP_PORT`) |
+| `app.py` | none — device code shows a code instead of redirecting | | |
+| `confidential_client.py` | none — no browser, no user | | |
+
+*Authentication → Add a platform*, then add the URI. Two things to get right:
+
+- **The platform decides whether client authentication is required.** A URI
+  under *Web* makes Azure demand a `client_secret` on the code and refresh
+  exchanges; missing it gives AADSTS7000218 (`must contain 'client_assertion' or
+  'client_secret'`). Under *Mobile and desktop applications*, PKCE alone is
+  enough. That is the whole difference between the public and confidential
+  variants of the same code exchange — so `interactive.py` under *Web* needs
+  `AZURE_CLIENT_SECRET`, and `web_app.py` always does.
+- ***Allow public client flows* does not override the platform.** That toggle
+  enables the flows with no redirect URI at all — device code, ROPC — which is
+  why `app.py` needs no secret. A URI under *Web* still makes its own code
+  exchange confidential, toggle or not.
+- **A URI belongs to exactly one platform**, and presenting a secret for a
+  *Mobile and desktop* URI fails the other way (AADSTS700025, `client is
+  public`). The default `http://localhost:8400/` under *Mobile and desktop
+  applications* is the public variant; the confidential desktop variant needs a
+  second URI of its own under *Web*, pointed at with `AZURE_REDIRECT_URI`.
+- **The match is exact**, including the trailing slash and the port. All these
+  URIs can coexist on one registration, each under its own platform.
+- *Implicit grant and hybrid flows* is **not** part of this: it returns tokens
+  straight from the authorize endpoint, which none of these scripts use. Leave
+  both checkboxes off.
+
+`web_app.py` prints its redirect URI on startup and `interactive.py` prints the
+authorize URL containing it, so a mismatch (AADSTS50011) can be compared against
+the portal directly. Because a refresh token is bound to the client-auth mode it
+was minted under, switching a script between public and confidential also
+invalidates its cached token; `interactive.py` detects that and signs in again
+rather than failing.
 
 ## Run
 
@@ -28,30 +95,38 @@ docker compose up -d
 uv venv --python 3.14 .venv && source .venv/bin/activate
 uv pip install -r requirements.txt
 set -a; source .env; set +a
-python app.py             # first run prints a device-code prompt; sign in once
 ```
 
-Expected: `currentUser(): you@example.com`. Tokens cache at
-`~/.cache/ch-azure-connect-jwt.json` (0600); later runs skip the browser. The CH
-user is created on first init only, so after changing `CH_JWT_USER` re-provision
-with `docker compose down -v && docker compose up -d`.
+Then pick a scenario:
 
-## Sign-in options
+```bash
+python app.py                  # device code: prints a code, sign in once
+python interactive.py          # opens a browser, captures the redirect locally
+python confidential_client.py  # needs AZURE_CLIENT_SECRET; no browser
+python web_app.py              # needs AZURE_CLIENT_SECRET; then open http://localhost:8500/
+```
 
-All three feed the same `token_provider` an Entra access token; pick the flow that
-fits how the app runs:
+The three delegated scripts print `currentUser(): you@example.com`;
+`confidential_client.py` prints the service principal's object id.
+`web_app.py` shows `currentUser()`, `currentRoles()`, a query result and the
+token's remaining lifetime, and renews on reload once the token has expired.
 
-- `app.py` — **device-code** (default above). No browser on the host; sign in on
-  any device from the printed code. Best for headless/remote shells.
-- `interactive.py` — **authorization-code + PKCE**, hand-rolled with `requests`
-  (no MSAL). Opens a browser, captures the redirect on a one-shot localhost
-  server, and the `token_provider` manages the access/refresh tokens itself.
-  This is the pure equivalent of
-  [MSAL's `interactive_sample.py`](https://github.com/AzureAD/microsoft-authentication-library-for-python/blob/dev/sample/interactive_sample.py).
-  Supports a confidential app via `AZURE_CLIENT_SECRET`.
-- `confidential_client.py` — **client-credentials** (app identity, no user, no
-  browser). Uses the `entra` processor with a token `user_directory` that
-  auto-provisions a user from the SP object id. For daemons/services.
+Tokens cache per script under `~/.cache/ch-azure-*.json` (0600), so later runs
+skip the browser; `web_app.py` keeps them in memory only, per session. The
+pre-defined CH user is created on first init only, so after changing
+`CH_JWT_USER` re-provision with `docker compose down -v && docker compose up -d`.
+
+## ClickHouse side
+
+`clickhouse-config/jwt_processors.xml` configures two `entra` processors,
+because the two token shapes carry different identity claims:
+
+- `azure` — `username_claim=upn`, no user directory. Delegated tokens map to the
+  pre-defined `IDENTIFIED WITH jwt` user from `init-clickhouse.sh`. Listed
+  first, since a delegated token also carries `oid`.
+- `azure_app` — `username_claim=oid`, with a `<user_directories><token>` bound
+  to it. App-only tokens have no `upn`, so the service principal is
+  auto-provisioned on first login and granted `azure_jwt_role`.
 
 ## Why an access token, not an id_token?
 
