@@ -3,7 +3,7 @@
 `--jwt-command` (Antalya PR
 [#1809](https://github.com/Altinity/ClickHouse/pull/1809)) runs a script and
 reads a bearer token from its stdout — "invoked on the first connect, before
-reconnects when the cached JWT" is rejected. These two scripts sign in to Azure
+reconnects when the cached JWT is rejected". These two scripts sign in to Azure
 Entra and emit an **access token**, which ClickHouse validates with the `entra`
 processor.
 
@@ -83,15 +83,15 @@ on the host, so that one must stay published and match the redirect URI.
 docker compose exec clickhouse clickhouse-client \
   --jwt-command /usr/local/bin/azure-client-credentials.sh \
   --jwt-command-timeout 120 \
-  --query "SELECT currentUser(), currentRoles()"
-# expect: <service-principal-object-id>   ['azure_jwt_role']
+  --query "SELECT currentUser()"
+# expect: <service-principal-object-id>
 
 # 2. interactive (row 4) — open the printed URL on the host and sign in
 docker compose exec clickhouse clickhouse-client \
   --jwt-command /usr/local/bin/azure-interactive.sh \
   --jwt-command-timeout 600 \
-  --query "SELECT currentUser(), currentRoles()"
-# expect: $CH_JWT_USER   ['azure_jwt_role']
+  --query "SELECT currentUser()"
+# expect: $CH_JWT_USER
 ```
 
 Then confirm the server resolved each token through the intended processor —
@@ -130,9 +130,8 @@ parsed, and the token endpoint is reached. The expected outcome is a **400** wit
 client-auth mode is wrong, per the platform table above. Substituting a wrong
 `state` must yield `state mismatch on the redirect` with nothing on stdout.
 
-A real sign-in caches its tokens in the container, so re-running afterwards
-exercises the cache and refresh paths with no browser at all. `docker compose
-restart` preserves that cache; `up -d --force-recreate` and `down -v` destroy it.
+Nothing is persisted between runs, so this is the only way to exercise the flow
+repeatedly without signing in every time.
 
 **After editing any mounted script or config**, run `docker compose restart` —
 a per-file bind mount follows the inode, and editors replace it, so the running
@@ -153,11 +152,11 @@ Interactive (row 4) — prints a URL, waits for the redirect:
 docker compose exec clickhouse clickhouse-client \
   --jwt-command /usr/local/bin/azure-interactive.sh \
   --jwt-command-timeout 600 \
-  --query "SELECT currentUser(), currentRoles()"
+  --query "SELECT currentUser()"
 ```
 
 Open the printed URL in a browser on the host and sign in. Expected:
-`your-upn@example.com   ['azure_jwt_role']`.
+`your-upn@example.com`.
 
 Headless (row 5) — no browser, no user:
 
@@ -165,10 +164,10 @@ Headless (row 5) — no browser, no user:
 docker compose exec clickhouse clickhouse-client \
   --jwt-command /usr/local/bin/azure-client-credentials.sh \
   --jwt-command-timeout 120 \
-  --query "SELECT currentUser(), currentRoles()"
+  --query "SELECT currentUser()"
 ```
 
-Expected: the service principal's object id and `['azure_jwt_role']`.
+Expected: the service principal's object id.
 
 ## How it works
 
@@ -194,12 +193,15 @@ Expected: the service principal's object id and `['azure_jwt_role']`.
   `azure_app`. A name sorting after `azure_app` silently auto-provisions an
   `oid`-named user instead.
 
-Tokens cache inside the container (`~/.cache/ch-azure-pkce-jwt.json`,
-`~/.cache/ch-azure-cc-jwt.json`, mode 0600), so reconnects within a token's
-lifetime skip Azure entirely; the interactive script then falls back to its
-refresh token before asking for a new sign-in. `docker compose down -v` clears
-them along with the pre-defined user, which is also how you re-provision after
-changing `CH_JWT_USER`.
+- **No token is persisted.** Every invocation mints a fresh one: another
+  client-credentials grant for the headless script, another browser sign-in for
+  the interactive one. Since `clickhouse-client` re-runs `--jwt-command` on
+  reconnect, a dropped connection means signing in again. The interactive script
+  therefore asks for no `offline_access`: with nothing stored between
+  invocations, a refresh token could never be used.
+
+`docker compose down -v` clears the pre-defined user, which is how you
+re-provision after changing `CH_JWT_USER`.
 
 Every `azure/` directory in this repo would otherwise default to the Compose
 project name `azure` and share containers and volumes, so this one sets `name:`

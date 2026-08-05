@@ -1,15 +1,12 @@
 #!/bin/bash
-# Runs once on first container init: role, demo table, and a pre-defined jwt user
-# named after the token's `upn` (an email, so created via SQL, not XML). The
-# client-credentials flow needs no counterpart here — its user is
-# auto-provisioned from the service principal's `oid`.
+# The jwt user is named after the token's `upn` — an email, so SQL, not XML.
+# The client-credentials flow needs none: its user is auto-provisioned from `oid`.
 set -eu
 
 chc() { clickhouse client --query "$1"; }
 
 chc "CREATE ROLE IF NOT EXISTS azure_jwt_role"
 chc "GRANT SELECT ON default.* TO azure_jwt_role"
-chc "CREATE TABLE IF NOT EXISTS default.test_table_1 ENGINE = TinyLog AS SELECT toUInt64(123) AS id"
 
 # escape \ then ` so the value can't alter the quoted identifier
 user=${CH_JWT_USER//\\/\\\\}
