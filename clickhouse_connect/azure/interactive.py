@@ -10,20 +10,25 @@ processor as app.py — no extra server config. Renews silently via the refresh
 token (offline_access).
 
 Public vs confidential client: PKCE alone is enough for a public client (same
-registration app.py uses). If the app is confidential, set AZURE_CLIENT_SECRET
-and it is sent on the code/refresh exchange too — this is what avoids
-AADSTS7000218 ("must contain 'client_assertion' or 'client_secret'"), the error
-MSAL's public-client interactive_sample.py hits against a confidential app.
+registration app.py uses), and a public client must NOT send a secret —
+Azure rejects that with AADSTS700025. Only if this script's redirect URI is
+registered under "Web" does Azure demand client auth on the code exchange
+(AADSTS7000218, the error MSAL's public-client interactive_sample.py hits
+against a confidential app); that is what the secret below is for.
 
 Env:
   AZURE_TENANT_ID       required
   AZURE_CLIENT_ID       required
-  AZURE_CLIENT_SECRET   optional; required only for a confidential app
   AZURE_SCOPE           optional; default "<CLIENT_ID>/.default offline_access"
   AZURE_REDIRECT_URI    optional; default http://localhost:8400/
                         must be registered on the app (Authentication ->
                         "Mobile and desktop applications" for a public client,
                         or "Web" for a confidential client)
+  AZURE_INTERACTIVE_CLIENT_SECRET
+                        optional; set only for a "Web" redirect URI above.
+                        Separate from AZURE_CLIENT_SECRET so that setting the
+                        latter for confidential_client.py / web_app.py cannot
+                        break this script's public-client flow.
 """
 import base64
 import hashlib
@@ -42,7 +47,9 @@ import requests
 
 TENANT = os.environ["AZURE_TENANT_ID"]
 CLIENT = os.environ["AZURE_CLIENT_ID"]
-SECRET = os.environ.get("AZURE_CLIENT_SECRET")  # only needed for a confidential app
+# deliberately not AZURE_CLIENT_SECRET: that one is set for the confidential
+# scripts, and sending it on a desktop redirect URI fails with AADSTS700025
+SECRET = os.environ.get("AZURE_INTERACTIVE_CLIENT_SECRET")
 # Bare-GUID scope (not api://<client_id>): an app requesting a token for itself
 # must use the GUID form or Azure returns AADSTS90009.
 SCOPE = os.environ.get("AZURE_SCOPE") or f"{CLIENT}/.default offline_access"

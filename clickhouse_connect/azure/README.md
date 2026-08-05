@@ -22,10 +22,13 @@ though each script hand-rolls the flow with `requests` instead of using MSAL.
 | Device code (no MSAL counterpart here) | `app.py` | no secret; sign in from any device | pre-defined `CH_JWT_USER`, from `upn` |
 
 `interactive.py` also covers the confidential *desktop* variant: set
-`AZURE_CLIENT_SECRET` and it authenticates the client on the code and refresh
-exchanges too — this is what avoids AADSTS7000218 (`must contain
+`AZURE_INTERACTIVE_CLIENT_SECRET` and it authenticates the client on the code
+and refresh exchanges too — this is what avoids AADSTS7000218 (`must contain
 'client_assertion' or 'client_secret'`), the error MSAL's public-client
-`interactive_sample.py` hits against a confidential app.
+`interactive_sample.py` hits against a confidential app. It is a separate
+variable from `AZURE_CLIENT_SECRET` on purpose: one `.env` serves every script
+here, and sending a secret from a *Mobile and desktop applications* redirect
+URI fails with AADSTS700025 (`Client is public`).
 
 ## Azure app registration
 
@@ -62,7 +65,9 @@ the two browser flows need one.
   'client_secret'`). Under *Mobile and desktop applications*, PKCE alone is
   enough. That is the whole difference between the public and confidential
   variants of the same code exchange — so `interactive.py` under *Web* needs
-  `AZURE_CLIENT_SECRET`, and `web_app.py` always does.
+  `AZURE_INTERACTIVE_CLIENT_SECRET`, and `web_app.py` always needs
+  `AZURE_CLIENT_SECRET`. Sending one from a *desktop* URI is the mirror-image
+  error, AADSTS700025 (`Client is public`).
 - ***Allow public client flows* does not override the platform.** That toggle
   enables the flows with no redirect URI at all — device code, ROPC — which is
   why `app.py` needs no secret. A URI under *Web* still makes its own code
