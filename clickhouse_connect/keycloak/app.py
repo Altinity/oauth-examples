@@ -48,19 +48,15 @@ def fetch_id_token() -> str:
 def main() -> int:
     token = fetch_id_token()
 
-    # access_token= is the JWT-forwarding kwarg in clickhouse-connect 0.8.12+.
-    # The driver sets `Authorization: Bearer <token>` on every HTTP request
-    # and forbids combining it with username/password. To rotate without
-    # rebuilding the client, call client.set_access_token(new_jwt).
+    # cannot be combined with username/password; rotate via set_access_token()
     client = clickhouse_connect.get_client(
         host=CH_HOST,
         port=CH_PORT,
         access_token=token,
     )
 
-    user, roles = client.query("SELECT currentUser(), currentRoles()").result_rows[0]
-    print(f"user:  {user}")
-    print(f"roles: {roles}")
+    user = client.query("SELECT currentUser()").result_rows[0][0]
+    print(f"user: {user}")
     return 0
 
 

@@ -80,10 +80,7 @@ the two browser flows need one.
 
 `web_app.py` prints its redirect URI on startup and `interactive.py` prints the
 authorize URL containing it, so a mismatch (AADSTS50011) can be compared against
-the portal directly. Because a refresh token is bound to the client-auth mode it
-was minted under, switching a script between public and confidential also
-invalidates its cached token; `interactive.py` detects that and signs in again
-rather than failing.
+the portal directly.
 
 ## Run
 
@@ -100,7 +97,7 @@ set -a; source .env; set +a
 Then pick a scenario:
 
 ```bash
-python app.py                  # device code: prints a code, sign in once
+python app.py                  # device code: prints a code to enter in a browser
 python interactive.py          # opens a browser, captures the redirect locally
 python confidential_client.py  # needs AZURE_CLIENT_SECRET; no browser
 python web_app.py              # needs AZURE_CLIENT_SECRET; then open http://localhost:8500/
@@ -108,13 +105,13 @@ python web_app.py              # needs AZURE_CLIENT_SECRET; then open http://loc
 
 The three delegated scripts print `currentUser(): you@example.com`;
 `confidential_client.py` prints the service principal's object id.
-`web_app.py` shows `currentUser()`, `currentRoles()`, a query result and the
-token's remaining lifetime, and renews on reload once the token has expired.
+`web_app.py` shows `currentUser()` and the token's remaining lifetime, and
+renews on reload once the token has expired.
 
-Tokens cache per script under `~/.cache/ch-azure-*.json` (0600), so later runs
-skip the browser; `web_app.py` keeps them in memory only, per session. The
-pre-defined CH user is created on first init only, so after changing
-`CH_JWT_USER` re-provision with `docker compose down -v && docker compose up -d`.
+No token is persisted anywhere: every run signs in again and gets a new token,
+and each script's tokens live only as long as its process. The pre-defined CH
+user is created on first init only, so after changing `CH_JWT_USER` re-provision
+with `docker compose down -v && docker compose up -d`.
 
 ## ClickHouse side
 

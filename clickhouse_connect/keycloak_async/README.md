@@ -57,12 +57,10 @@ it is not a default event type).
    token in its `Authorization` header, so every client hits one 516 and
    re-invokes the shared callable — the burst window hands them the
    already-renewed token;
-5. **stampede** — SELECTs and INSERTs from both users hit expired tokens
-   simultaneously. Inserts are the risky half: the driver retries a
-   516-rejected request only if it can replay the body (streamed insert
-   bodies are rebuilt via its `retry_body` hook) — asserted here as
-   exactly-once delivery (12/12 rows, no duplicates) plus one refresh grant
-   per user;
+5. **stampede** — both users burst simultaneously on tokens that have
+   already expired (the two expiries are staggered — the scenario waits out
+   the later one first): every query recovers, and each user's provider lands
+   exactly one refresh grant, with no cross-user interference;
 6. **in-flight** — a query longer than the token lifespan (~20s query, 15s
    token) started on a fresh token still completes: ClickHouse validates the
    bearer token once at query start, so it expires mid-flight with no 516 and

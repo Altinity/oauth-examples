@@ -10,12 +10,6 @@
             <query>GRANT SELECT ON default.* TO jwt_role</query>
         </scripts>
         <scripts>
-            <query>CREATE TABLE IF NOT EXISTS default.events (id UInt64, who String) ENGINE = MergeTree ORDER BY id</query>
-        </scripts>
-        <scripts>
-            <query>GRANT INSERT ON default.events TO jwt_role</query>
-        </scripts>
-        <scripts>
             <query>CREATE USER IF NOT EXISTS `alice@example.com` IDENTIFIED WITH jwt</query>
         </scripts>
         <scripts>

@@ -1,8 +1,8 @@
 """
 Azure Entra device-code -> clickhouse-connect via a refreshable token_provider
-(driver 1.2.0+, PR #775). Signs in once, caches the tokens, renews silently via
-the refresh token, and forwards the ACCESS token, which ClickHouse validates
-with the `entra` processor.
+(driver 1.2.0+, PR #775). Signs in on every run, renews silently via the refresh
+token for the life of the process, and forwards the ACCESS token, which
+ClickHouse validates with the `entra` processor.
 """
 import base64
 import json
@@ -19,8 +19,6 @@ CLIENT = os.environ["AZURE_CLIENT_ID"]
 # must use the GUID form or Azure returns AADSTS90009.
 SCOPE = f"{CLIENT}/.default offline_access"
 BASE = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0"
-CACHE = os.path.expanduser(
-    os.environ.get("AZURE_TOKEN_CACHE") or "~/.cache/ch-azure-connect-jwt.json")
 
 CH_HOST = os.environ.get("CLICKHOUSE_HOST") or "localhost"
 CH_PORT = int(os.environ.get("CLICKHOUSE_PORT") or "8123")
@@ -85,7 +83,6 @@ def renew(tokens):
         try:
             return refresh(refresh_token)
         except requests.HTTPError as exc:
-            # only a dead / interaction-required token warrants re-auth; else transient
             if oauth_error(exc.response) not in ("invalid_grant", "interaction_required"):
                 raise RuntimeError(f"token refresh failed, retry later: {exc}") from exc
         except requests.RequestException as exc:
@@ -93,31 +90,13 @@ def renew(tokens):
     return device_code_flow()
 
 
-def save(tokens):
-    os.makedirs(os.path.dirname(CACHE) or ".", exist_ok=True)
-    fd = os.open(CACHE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # 0600: holds a refresh token
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "w") as f:
-        json.dump(tokens, f)
-
-
-def load():
-    try:
-        with open(CACHE) as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        return {}
-
-
 def make_token_provider():
-    tokens = load()
+    tokens = {}
     last_issued = None
 
     def token_provider():
         nonlocal last_issued
         access_token = tokens.get("access_token")
-        # reuse the cached token unless expired or just rejected (== last_issued)
         if access_token and time.time() < token_exp(access_token) - 60 \
                 and access_token != last_issued:
             last_issued = access_token
@@ -127,7 +106,6 @@ def make_token_provider():
         new.setdefault("refresh_token", tokens.get("refresh_token"))
         tokens.clear()
         tokens.update(new)
-        save(tokens)
         last_issued = tokens["access_token"]
         return tokens["access_token"]
 

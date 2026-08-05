@@ -24,8 +24,7 @@ python app.py
 Expected:
 
 ```
-user:  alice@example.com
-roles: ['jwt_role']
+user: alice@example.com
 ```
 
 ## Knobs

@@ -12,8 +12,5 @@
         <scripts>
             <query>GRANT SELECT ON default.* TO jwt_role</query>
         </scripts>
-        <scripts>
-            <query>CREATE TABLE IF NOT EXISTS default.test_table_1 ENGINE=TinyLog AS SELECT toUInt64(123) AS id</query>
-        </scripts>
     </startup_scripts>
 </clickhouse>

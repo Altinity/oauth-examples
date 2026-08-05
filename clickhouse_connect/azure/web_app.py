@@ -46,8 +46,7 @@ TENANT = os.environ["AZURE_TENANT_ID"]
 CLIENT = os.environ["AZURE_CLIENT_ID"]
 SECRET = os.environ["AZURE_CLIENT_SECRET"]
 # Bare-GUID scope (not api://<client_id>): an app requesting a token for itself
-# must use the GUID form or Azure returns AADSTS90009. offline_access asks for
-# the refresh token the provider renews with.
+# must use the GUID form or Azure returns AADSTS90009.
 SCOPE = os.environ.get("AZURE_SCOPE") or f"{CLIENT}/.default offline_access"
 REDIRECT_URI = (os.environ.get("AZURE_WEB_REDIRECT_URI")
                 or "http://localhost:8500/auth/callback")
@@ -61,7 +60,6 @@ EXP_SKEW = 60        # treat tokens expiring within a minute as expired
 BURST_WINDOW = 10.0  # concurrent rejections share one renewal
 
 app = Flask(__name__)
-# signs the session cookie, which carries only the opaque sid
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_bytes(32)
 
 
@@ -173,7 +171,7 @@ def current_user():
     if not sid:
         return None
     with SESSIONS_LOCK:
-        return SESSIONS.get(sid)  # missing after a restart -> signed out
+        return SESSIONS.get(sid)
 
 
 def forget():
@@ -196,8 +194,6 @@ PAGE = """<!doctype html>
   <h1>Signed in</h1>
   <table>
     <tr><th>currentUser()</th><td>{{ ch_user }}</td></tr>
-    <tr><th>currentRoles()</th><td>{{ roles }}</td></tr>
-    <tr><th>count() from default.test_table_1</th><td>{{ rows }}</td></tr>
     <tr><th>access token expires in</th><td>{{ expires_in }}s</td></tr>
   </table>
   <p>Reload to query again. Once the token expires ClickHouse rejects it, the
@@ -217,21 +213,18 @@ def index():
     if user is None:
         return render_template_string(PAGE, ch_user=None)
     try:
-        row = user.client().query(
-            "SELECT currentUser(), currentRoles(), "
-            "(SELECT count() FROM default.test_table_1)").result_rows[0]
+        ch_user = user.client().query("SELECT currentUser()").result_rows[0][0]
     except ReauthRequired:
         forget()
         return redirect(url_for("login"))
-    return render_template_string(PAGE, ch_user=row[0], roles=list(row[1]),
-                                  rows=row[2], expires_in=user.expires_in())
+    return render_template_string(PAGE, ch_user=ch_user,
+                                  expires_in=user.expires_in())
 
 
 @app.get("/login")
 def login():
     state = b64url(secrets.token_bytes(16))
     verifier = b64url(secrets.token_bytes(32))
-    # cookie-side, so the callback can check them without server state
     session["state"] = state
     session["verifier"] = verifier
     params = {
@@ -268,7 +261,7 @@ def auth_callback():
                            "code_verifier": verifier})
     except (ReauthRequired, RuntimeError) as exc:
         return f"code exchange failed: {exc}", 400
-    forget()  # drop any previous session before adopting the new identity
+    forget()
     session["sid"] = remember(tokens)
     return redirect(url_for("index"))
 

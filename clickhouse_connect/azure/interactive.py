@@ -24,7 +24,6 @@ Env:
                         must be registered on the app (Authentication ->
                         "Mobile and desktop applications" for a public client,
                         or "Web" for a confidential client)
-  AZURE_TOKEN_CACHE     optional; default ~/.cache/ch-azure-interactive-jwt.json
 """
 import base64
 import hashlib
@@ -45,13 +44,10 @@ TENANT = os.environ["AZURE_TENANT_ID"]
 CLIENT = os.environ["AZURE_CLIENT_ID"]
 SECRET = os.environ.get("AZURE_CLIENT_SECRET")  # only needed for a confidential app
 # Bare-GUID scope (not api://<client_id>): an app requesting a token for itself
-# must use the GUID form or Azure returns AADSTS90009. offline_access asks for
-# a refresh token so later runs skip the browser.
+# must use the GUID form or Azure returns AADSTS90009.
 SCOPE = os.environ.get("AZURE_SCOPE") or f"{CLIENT}/.default offline_access"
 REDIRECT_URI = os.environ.get("AZURE_REDIRECT_URI") or "http://localhost:8400/"
 BASE = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0"
-CACHE = os.path.expanduser(
-    os.environ.get("AZURE_TOKEN_CACHE") or "~/.cache/ch-azure-interactive-jwt.json")
 
 CH_HOST = os.environ.get("CLICKHOUSE_HOST") or "localhost"
 CH_PORT = int(os.environ.get("CLICKHOUSE_PORT") or "8123")
@@ -174,41 +170,20 @@ def renew(tokens):
         try:
             return refresh(refresh_token)
         except requests.HTTPError as exc:
-            # a dead token, or a cached one minted under the other client-auth
-            # mode (invalid_client), needs a fresh sign-in; else transient
-            if oauth_error(exc.response) not in (
-                    "invalid_grant", "interaction_required", "invalid_client"):
+            if oauth_error(exc.response) not in ("invalid_grant", "interaction_required"):
                 raise RuntimeError(f"token refresh failed, retry later: {exc}") from exc
         except requests.RequestException as exc:
             raise RuntimeError(f"token refresh failed (network), retry later: {exc}") from exc
     return interactive_flow()
 
 
-def save(tokens):
-    os.makedirs(os.path.dirname(CACHE) or ".", exist_ok=True)
-    fd = os.open(CACHE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # 0600: holds a refresh token
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "w") as f:
-        json.dump(tokens, f)
-
-
-def load():
-    try:
-        with open(CACHE) as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        return {}
-
-
 def make_token_provider():
-    tokens = load()
+    tokens = {}
     last_issued = None
 
     def token_provider():
         nonlocal last_issued
         access_token = tokens.get("access_token")
-        # reuse the cached token unless expired or just rejected (== last_issued)
         if access_token and time.time() < token_exp(access_token) - 60 \
                 and access_token != last_issued:
             last_issued = access_token
@@ -218,7 +193,6 @@ def make_token_provider():
         new.setdefault("refresh_token", tokens.get("refresh_token"))
         tokens.clear()
         tokens.update(new)
-        save(tokens)
         last_issued = tokens["access_token"]
         return tokens["access_token"]
 
