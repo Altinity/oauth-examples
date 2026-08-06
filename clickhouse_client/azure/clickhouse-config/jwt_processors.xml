@@ -2,25 +2,30 @@
     <!-- Entra ACCESS-token validation for the two token shapes the scripts
          produce. Delegated (user) tokens carry `upn`; app-only
          (client-credentials) tokens carry no `upn`, only `oid` — the service
-         principal's object id — so each needs its own processor. -->
+         principal's object id — so each needs its own processor.
+
+         Both users are pre-defined by init-clickhouse.sh, so there is no
+         `user_directories/token` section: a token naming a user that does not
+         exist fails with AUTHENTICATION_FAILED rather than being provisioned. -->
     <!-- master switch; without it all tokens are rejected -->
     <enable_token_auth>true</enable_token_auth>
 
     <token_processors>
         <!-- azure-interactive.sh. A delegated token carries BOTH `upn` and
-             `oid`, so the processor that resolves it first decides the CH
-             username — and precedence follows the processor NAME's sort order,
-             not the order written here. `azure` sorts before `azure_app`, which
-             is what keeps delegated tokens mapping to the pre-defined `upn` user
-             instead of auto-provisioning an oid-named one. Renaming this to
-             anything sorting after `azure_app` silently breaks that. -->
+             `oid`, so the first processor whose claim is present names the CH
+             user — and precedence follows the processor NAME's sort order, not
+             the order written here. There is no fall-through to the next
+             processor. `azure` sorts before `azure_app`, which is what maps
+             delegated tokens onto the `upn` user; a name sorting after
+             `azure_app` sends them to the `oid` user instead. -->
         <azure>
             <type>entra</type>
             <tenant_id from_env="AZURE_TENANT_ID"></tenant_id>
             <expected_audience from_env="AZURE_CLIENT_ID"></expected_audience>
             <username_claim>upn</username_claim>
         </azure>
-        <!-- azure-client-credentials.sh. No user to name the CH user after. -->
+        <!-- azure-client-credentials.sh. No `upn`, so this is what app-only
+             tokens reach; `oid` == `sub` == the service principal's object id. -->
         <azure_app>
             <type>entra</type>
             <tenant_id from_env="AZURE_TENANT_ID"></tenant_id>
@@ -29,18 +34,4 @@
         </azure_app>
     </token_processors>
 
-    <!-- ClickHouse permits exactly one `token` section ("Only one `token`
-         section can be defined", INVALID_CONFIG_PARAMETER), so auto-provisioning
-         serves one processor. It goes to azure_app: the service principal's
-         `oid` is a GUID you would otherwise have to look up to pre-create,
-         whereas the interactive flow's `upn` is just the operator's own login,
-         pre-created by init-clickhouse.sh. -->
-    <user_directories>
-        <token>
-            <processor>azure_app</processor>
-            <common_roles>
-                <azure_jwt_role />
-            </common_roles>
-        </token>
-    </user_directories>
 </clickhouse>

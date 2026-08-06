@@ -1,17 +1,16 @@
 #!/bin/bash
-# The jwt user is named after the token's `upn` — an email, so SQL, not XML.
-# The client-credentials flow needs none: its user is auto-provisioned from `oid`.
+# Both jwt users are pre-defined here, so jwt_processors.xml needs no token user
+# directory. Names come from the token claims, and one is an email, so SQL not XML.
+# No grants: these scenarios only check which user a token authenticates as.
 set -eu
 
-chc() { clickhouse client --query "$1"; }
+mkuser() {
+    # escape \ then ` so the value can't alter the quoted identifier
+    local u=${1//\\/\\\\}
+    u=${u//\`/\`\`}
+    clickhouse client --query "CREATE USER IF NOT EXISTS \`${u}\` IDENTIFIED WITH jwt"
+    echo "created pre-defined jwt user '${1}'"
+}
 
-chc "CREATE ROLE IF NOT EXISTS azure_jwt_role"
-chc "GRANT SELECT ON default.* TO azure_jwt_role"
-
-# escape \ then ` so the value can't alter the quoted identifier
-user=${CH_JWT_USER//\\/\\\\}
-user=${user//\`/\`\`}
-chc "CREATE USER IF NOT EXISTS \`${user}\` IDENTIFIED WITH jwt"
-chc "GRANT azure_jwt_role TO \`${user}\`"
-chc "ALTER USER \`${user}\` DEFAULT ROLE azure_jwt_role"  # DEFAULT ROLE: else no active roles
-echo "created pre-defined jwt user '${CH_JWT_USER}'"
+mkuser "$CH_JWT_USER"      # azure-interactive.sh, = the token's upn
+mkuser "$CH_JWT_APP_USER"  # azure-client-credentials.sh, = the service principal's oid

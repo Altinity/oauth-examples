@@ -16,7 +16,7 @@ though the scripts hand-roll the flows in bash.
 | Scenario | Script | Azure client | ClickHouse identity |
 | --- | --- | --- | --- |
 | **Public client, interactive** (`interactive_sample.py`) | `azure-interactive.sh` | no secret; auth code + PKCE, browser redirect to a one-shot `nc` listener | pre-defined `CH_JWT_USER`, from `upn` |
-| **Confidential client, headless** (`confidential_client_sample.py`) | `azure-client-credentials.sh` | client secret; client-credentials, no user | auto-provisioned, from the service principal's `oid` |
+| **Confidential client, headless** (`confidential_client_sample.py`) | `azure-client-credentials.sh` | client secret; client-credentials, no user | pre-defined `CH_JWT_APP_USER`, from `oid` |
 
 The MSAL *web app* scenario has no counterpart here: `--jwt-command` feeds a
 single CLI process, so there is no session to keep per user. See
@@ -29,6 +29,9 @@ One registration serves both scripts.
 - **Expose an API** (Application ID URI + a scope) — so it can issue a token for itself.
 - **`requestedAccessTokenVersion: 2`** in the manifest — else v1.0 tokens are rejected.
 - **`upn`** present in the access token (`azure-interactive.sh`).
+- The **service principal's object id** — `CH_JWT_APP_USER`, the app-only token's
+  `oid`. It is not the client id; read it with
+  `az ad sp show --id "$AZURE_CLIENT_ID" --query id -o tsv`.
 - *Authentication → Allow public client flows* = **Yes** — `azure-interactive.sh`
   as a public client.
 - *Certificates & secrets* → a **client secret** — `azure-client-credentials.sh`.
@@ -84,7 +87,7 @@ docker compose exec clickhouse clickhouse-client \
   --jwt-command /usr/local/bin/azure-client-credentials.sh \
   --jwt-command-timeout 120 \
   --query "SELECT currentUser()"
-# expect: <service-principal-object-id>
+# expect: $CH_JWT_APP_USER
 
 # 2. interactive (row 4) — open the printed URL on the host and sign in
 docker compose exec clickhouse clickhouse-client \
@@ -94,19 +97,22 @@ docker compose exec clickhouse clickhouse-client \
 # expect: $CH_JWT_USER
 ```
 
-Then confirm the server resolved each token through the intended processor —
-this is the check that catches a processor-precedence regression, where a
-delegated token silently lands on an `oid`-named user instead of `upn`:
+`currentUser()` is itself the processor-precedence check: with no auto-provisioning,
+a token that resolves to the wrong claim names a user that does not exist, so a
+mis-ordered processor fails as
+
+```
+Code: 516 ... <some-guid>: Authentication failed: password is incorrect,
+or there is no user with such name. (AUTHENTICATION_FAILED)
+```
+
+Both users are pre-defined, so both show `local_directory` and nothing is ever
+created at runtime:
 
 ```bash
 docker compose exec clickhouse clickhouse client --query "
-  SELECT name, storage FROM system.users ORDER BY name"
+  SELECT name, storage, auth_type FROM system.users ORDER BY name"
 ```
-
-`local_directory` holds the pre-defined `upn` user; `token` holds
-auto-provisioned ones. A GUID under `token` after the *interactive* flow means
-`azure_app` won the race and the processor names need re-checking. Auto-provisioned
-users are in-memory only, so they disappear on restart.
 
 ### Testing without spending a sign-in
 
@@ -141,7 +147,8 @@ container otherwise reports `No such file or directory`.
 
 ```bash
 cp .env.example .env      # set AZURE_TENANT_ID, AZURE_CLIENT_ID, CH_JWT_USER (= your upn)
-                          # plus AZURE_CLIENT_SECRET for the headless flow
+                          # plus AZURE_CLIENT_SECRET and CH_JWT_APP_USER
+                          # (= the service principal oid) for the headless flow
 set -a; source .env; set +a
 docker compose up -d
 ```
@@ -167,7 +174,7 @@ docker compose exec clickhouse clickhouse-client \
   --query "SELECT currentUser()"
 ```
 
-Expected: the service principal's object id.
+Expected: `$CH_JWT_APP_USER`, the service principal's object id.
 
 ## How it works
 
@@ -180,18 +187,25 @@ Expected: the service principal's object id.
 - **The listener runs inside the container**, while the browser runs on the host,
   so `docker-compose.yml` publishes the redirect port. The port is derived from
   `AZURE_REDIRECT_URI`, so the two cannot drift apart.
-- **Only one token user directory is allowed** — a second `<token>` section
-  fails startup with `Code: 318 ... Only one 'token' section can be defined`. So
-  auto-provisioning is bound to `azure_app`, whose `oid` is a GUID you would
-  otherwise have to look up, while the interactive flow's `upn` is pre-created by
-  `init-clickhouse.sh` from `CH_JWT_USER`.
+- **No token user directory.** Both identities are pre-defined by
+  `init-clickhouse.sh` — `CH_JWT_USER` (the `upn`) and `CH_JWT_APP_USER` (the
+  service principal's `oid`) — so `jwt_processors.xml` needs only
+  `enable_token_auth` plus the processors. `enable_token_auth` is what accepts
+  the token; the `<user_directories><token>` section only ever *provisioned*
+  users the local storage lacked, and there is nothing left for it to provision.
+  Dropping it also sidesteps its one-per-server limit (a second `<token>` section
+  fails startup with `Code: 318 ... Only one 'token' section can be defined`),
+  which is why both processors can now name pre-defined users.
 - **Two processors, and their names decide precedence.** A delegated token
-  carries both `upn` and `oid`, so whichever processor resolves it first names the
-  ClickHouse user — and that follows the processor **name's sort order**, not the
-  order in the file. `azure` sorts before `azure_app`, so delegated tokens land on
-  the pre-defined `upn` user; app-only tokens have no `upn` and fall through to
-  `azure_app`. A name sorting after `azure_app` silently auto-provisions an
-  `oid`-named user instead.
+  carries both `upn` and `oid`, so the first processor whose claim is present
+  names the ClickHouse user — following the processor **name's sort order**, not
+  the order in the file. `azure` sorts before `azure_app`, so delegated tokens
+  land on the `upn` user; app-only tokens have no `upn` and reach `azure_app`.
+- **There is no fall-through.** If the winning processor names a user that does
+  not exist, authentication fails outright — the server does not try the next
+  processor. Without auto-provisioning that turns a precedence mistake into a
+  loud `AUTHENTICATION_FAILED` naming the user it looked for, rather than a
+  silently wrong identity.
 
 - **No token is persisted.** Every invocation mints a fresh one: another
   client-credentials grant for the headless script, another browser sign-in for
@@ -200,8 +214,8 @@ Expected: the service principal's object id.
   therefore asks for no `offline_access`: with nothing stored between
   invocations, a refresh token could never be used.
 
-`docker compose down -v` clears the pre-defined user, which is how you
-re-provision after changing `CH_JWT_USER`.
+`init-clickhouse.sh` runs only on first init, so `docker compose down -v` is how
+you re-provision after changing `CH_JWT_USER` or `CH_JWT_APP_USER`.
 
 Every `azure/` directory in this repo would otherwise default to the Compose
 project name `azure` and share containers and volumes, so this one sets `name:`
