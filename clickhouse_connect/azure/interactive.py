@@ -89,7 +89,13 @@ def oauth_error(resp):
 
 
 def wait_for_auth_code(expected_state):
-    """One-shot localhost server that captures ?code= from the browser redirect."""
+    """Localhost server that captures ?code= from the browser redirect.
+
+    Keeps serving until a request actually carries `code` or `error`. Anything
+    else on this port -- IDE/devcontainer port-forwarding probes, favicon and
+    prefetch requests, a stale tab from an earlier run carrying a different
+    `state` -- is rejected and ignored rather than ending the wait.
+    """
     parsed = urllib.parse.urlparse(REDIRECT_URI)
     host = parsed.hostname or "localhost"
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
@@ -102,11 +108,14 @@ def wait_for_auth_code(expected_state):
             if qs.get("error"):
                 result["error"] = qs["error"][0]
                 result["error_description"] = qs.get("error_description", [""])[0]
-            elif qs.get("code") and qs.get("state", [None])[0] == expected_state:
-                result["code"] = qs["code"][0]
+            elif not qs.get("code"):
+                self.send_error(404)  # not the redirect
+                return
+            elif qs.get("state", [None])[0] != expected_state:
+                self.send_error(400, "state mismatch")  # redirect from another run
+                return
             else:
-                result["error"] = "invalid_callback"
-                result["error_description"] = "missing code or state mismatch"
+                result["code"] = qs["code"][0]
             body = (b"<html><body><h1>Sign-in complete</h1>"
                     b"<p>You can close this window and return to the terminal.</p>"
                     b"</body></html>")
@@ -121,13 +130,15 @@ def wait_for_auth_code(expected_state):
             return
 
     server = http.server.HTTPServer((host, port), Handler)
-    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    if not done.wait(timeout=300):
+    try:
+        if not done.wait(timeout=300):
+            raise RuntimeError("timed out waiting for browser sign-in")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
         server.server_close()
-        raise RuntimeError("timed out waiting for browser sign-in")
-    thread.join(timeout=5)
-    server.server_close()
     if "code" not in result:
         raise RuntimeError(
             f"sign-in failed: {result.get('error')}: {result.get('error_description')}")
