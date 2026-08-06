@@ -103,7 +103,7 @@ Then pick a scenario:
 
 ```bash
 python app.py                  # device code: prints a code to enter in a browser
-python interactive.py          # opens a browser, captures the redirect locally
+python interactive.py          # browser on first run, silent refresh after
 python confidential_client.py  # needs AZURE_CLIENT_SECRET; no browser
 python web_app.py              # needs AZURE_CLIENT_SECRET; then open http://localhost:8500/
 ```
@@ -113,10 +113,14 @@ The three delegated scripts print `currentUser(): you@example.com`;
 `web_app.py` shows `currentUser()` and the token's remaining lifetime, and
 renews on reload once the token has expired.
 
-No token is persisted anywhere: every run signs in again and gets a new token,
-and each script's tokens live only as long as its process. The pre-defined CH
-user is created on first init only, so after changing `CH_JWT_USER` re-provision
-with `docker compose down -v && docker compose up -d`.
+Only `interactive.py` persists anything: it caches its refresh token mode 0600
+in `~/.cache/clickhouse-connect-azure/interactive.json` (`AZURE_TOKEN_CACHE`),
+so later runs renew silently instead of opening a browser — delete that file to
+force a fresh sign-in, or set `AZURE_TOKEN_CACHE=none` to keep the token in
+memory only. Every other script's tokens live only as long as its process. The
+pre-defined CH user is created on first init only, so after changing
+`CH_JWT_USER` re-provision with
+`docker compose down -v && docker compose up -d`.
 
 ## ClickHouse side
 

@@ -7,7 +7,7 @@ page, the redirect lands back on a one-shot localhost server that captures the
 code, and the code is exchanged for tokens. Delegated (user) tokens carry
 `upn`, so ClickHouse maps them to the pre-defined user via the same `azure`
 processor as app.py — no extra server config. Renews silently via the refresh
-token (offline_access).
+token (offline_access), which is cached on disk so later runs skip the browser.
 
 Public vs confidential client: PKCE alone is enough for a public client (same
 registration app.py uses), and a public client must NOT send a secret —
@@ -29,8 +29,13 @@ Env:
                         Separate from AZURE_CLIENT_SECRET so that setting the
                         latter for confidential_client.py / web_app.py cannot
                         break this script's public-client flow.
+  AZURE_TOKEN_CACHE     optional; default
+                        ~/.cache/clickhouse-connect-azure/interactive.json
+                        holds the refresh token, mode 0600. Set to "none" to
+                        keep it in memory only, like the other scripts here.
 """
 import base64
+import contextlib
 import hashlib
 import http.server
 import json
@@ -38,7 +43,6 @@ import os
 import secrets
 import sys
 import threading
-import time
 import urllib.parse
 import webbrowser
 
@@ -59,6 +63,12 @@ BASE = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0"
 CH_HOST = os.environ.get("CLICKHOUSE_HOST") or "localhost"
 CH_PORT = int(os.environ.get("CLICKHOUSE_PORT") or "8123")
 
+CACHE_PATH = os.environ.get("AZURE_TOKEN_CACHE") or os.path.join(
+    os.environ.get("XDG_CACHE_HOME") or "~/.cache",
+    "clickhouse-connect-azure", "interactive.json")
+# "none" opts out: the refresh token then lives only as long as this process
+CACHE_PATH = None if CACHE_PATH.lower() == "none" else os.path.expanduser(CACHE_PATH)
+
 
 def b64url(data):
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
@@ -72,13 +82,40 @@ def with_secret(data):
     return data
 
 
-def token_exp(token):
+def load_refresh_token():
+    """The refresh token left by an earlier run, if it fits this registration."""
+    if CACHE_PATH is None:
+        return None
     try:
-        payload = token.split(".")[1]
-        payload += "=" * (-len(payload) % 4)
-        return json.loads(base64.urlsafe_b64decode(payload))["exp"]
-    except Exception:
-        return 0  # undecodable -> treat as expired
+        with open(CACHE_PATH, encoding="utf-8") as fh:
+            cached = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    if cached.get("tenant") != TENANT or cached.get("client") != CLIENT:
+        return None  # cache belongs to a different app registration
+    return cached.get("refresh_token")
+
+
+def save_refresh_token(refresh_token):
+    """Mirror the in-memory refresh token to disk; drop the file when there is none."""
+    if CACHE_PATH is None:
+        return
+    if not refresh_token:
+        with contextlib.suppress(OSError):
+            os.remove(CACHE_PATH)
+        return
+    try:
+        directory = os.path.dirname(CACHE_PATH)
+        if directory:
+            os.makedirs(directory, mode=0o700, exist_ok=True)
+        # O_CREAT with 0600 so the token is never briefly world-readable
+        fd = os.open(CACHE_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"tenant": TENANT, "client": CLIENT,
+                       "refresh_token": refresh_token}, fh)
+    except OSError as exc:
+        # the token still works for this process; only the next run pays for it
+        print(f"warning: could not cache refresh token: {exc}", file=sys.stderr)
 
 
 def oauth_error(resp):
@@ -179,11 +216,14 @@ def refresh(refresh_token):
         "grant_type": "refresh_token", "client_id": CLIENT,
         "refresh_token": refresh_token, "scope": SCOPE}), timeout=30)
     r.raise_for_status()
-    return r.json()
+    tokens = r.json()
+    # RFC 6749 §6 lets the IdP omit refresh_token on a refresh
+    tokens.setdefault("refresh_token", refresh_token)
+    return tokens
 
 
-def renew(tokens):
-    refresh_token = tokens.get("refresh_token")
+def renew(refresh_token):
+    """Silent refresh while the refresh token lives, browser sign-in once it doesn't."""
     if refresh_token:
         try:
             return refresh(refresh_token)
@@ -196,22 +236,18 @@ def renew(tokens):
 
 
 def make_token_provider():
-    tokens = {}
-    last_issued = None
+    """The token_provider: called at client init and on each ClickHouse rejection.
+
+    Both cases need a token the driver does not already hold, so every call
+    renews rather than serving a cache.
+    """
+    refresh_token = load_refresh_token()
 
     def token_provider():
-        nonlocal last_issued
-        access_token = tokens.get("access_token")
-        if access_token and time.time() < token_exp(access_token) - 60 \
-                and access_token != last_issued:
-            last_issued = access_token
-            return access_token
-
-        new = renew(tokens)
-        new.setdefault("refresh_token", tokens.get("refresh_token"))
-        tokens.clear()
-        tokens.update(new)
-        last_issued = tokens["access_token"]
+        nonlocal refresh_token
+        tokens = renew(refresh_token)
+        refresh_token = tokens.get("refresh_token")
+        save_refresh_token(refresh_token)
         return tokens["access_token"]
 
     return token_provider
