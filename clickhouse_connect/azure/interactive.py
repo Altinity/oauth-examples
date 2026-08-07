@@ -30,9 +30,11 @@ Env:
                         latter for confidential_client.py / web_app.py cannot
                         break this script's public-client flow.
   AZURE_TOKEN_CACHE     optional; default
-                        ~/.cache/clickhouse-connect-azure/interactive.json
-                        holds the refresh token, mode 0600. Set to "none" to
-                        keep it in memory only, like the other scripts here.
+                        $XDG_CACHE_HOME/clickhouse-connect-azure/interactive.json
+                        (~/.cache when XDG_CACHE_HOME is unset). Holds the
+                        refresh token, mode 0600, one slot per registration,
+                        shared with pooled.py. Set to "none" to keep the token
+                        in memory only, like the other scripts here.
 """
 import base64
 import contextlib
@@ -45,6 +47,11 @@ import sys
 import threading
 import urllib.parse
 import webbrowser
+
+try:
+    import fcntl  # POSIX only; without it the cache is not multi-process safe
+except ImportError:
+    fcntl = None
 
 import clickhouse_connect
 import requests
@@ -82,8 +89,34 @@ def with_secret(data):
     return data
 
 
+CACHE_KEY = f"{TENANT}/{CLIENT}"  # one slot per app registration
+
+
+@contextlib.contextmanager
+def cache_lock():
+    """Serialise renewals across processes sharing this cache file.
+
+    Azure rotates the refresh token on every use, so two processes that read
+    the same token and spend it concurrently get one success and one
+    invalid_grant — and replay detection can revoke the whole token family.
+    Hold this for the entire read-renew-write cycle, not just the write.
+    """
+    if CACHE_PATH is None or fcntl is None:
+        yield
+        return
+    directory = os.path.dirname(CACHE_PATH)
+    if directory:
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+    fd = os.open(f"{CACHE_PATH}.lock", os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)  # releases the lock
+
+
 def load_refresh_token():
-    """The refresh token left by an earlier run, if it fits this registration."""
+    """The refresh token left by an earlier run of this app registration."""
     if CACHE_PATH is None:
         return None
     try:
@@ -91,29 +124,43 @@ def load_refresh_token():
             cached = json.load(fh)
     except (OSError, ValueError):
         return None
-    if cached.get("tenant") != TENANT or cached.get("client") != CLIENT:
-        return None  # cache belongs to a different app registration
-    return cached.get("refresh_token")
+    if not isinstance(cached, dict):
+        return None  # valid JSON, wrong shape
+    entry = cached.get(CACHE_KEY)
+    return entry.get("refresh_token") if isinstance(entry, dict) else None
 
 
 def save_refresh_token(refresh_token):
-    """Mirror the in-memory refresh token to disk; drop the file when there is none."""
-    if CACHE_PATH is None:
+    """Store the refresh token for this registration, leaving other slots intact.
+
+    Written to a fresh temp file and renamed over the cache, so the mode is
+    always 0600 (O_CREAT alone would keep a pre-existing file's mode) and a
+    crash mid-write cannot truncate the token that is already there.
+    """
+    if CACHE_PATH is None or not refresh_token:
         return
-    if not refresh_token:
-        with contextlib.suppress(OSError):
-            os.remove(CACHE_PATH)
-        return
+    tmp = f"{CACHE_PATH}.{os.getpid()}.tmp"
     try:
         directory = os.path.dirname(CACHE_PATH)
         if directory:
             os.makedirs(directory, mode=0o700, exist_ok=True)
-        # O_CREAT with 0600 so the token is never briefly world-readable
-        fd = os.open(CACHE_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with open(CACHE_PATH, encoding="utf-8") as fh:
+                cache = json.load(fh)
+        except (OSError, ValueError):
+            cache = {}
+        if not isinstance(cache, dict):
+            cache = {}
+        cache[CACHE_KEY] = {"refresh_token": refresh_token}
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump({"tenant": TENANT, "client": CLIENT,
-                       "refresh_token": refresh_token}, fh)
+            json.dump(cache, fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, CACHE_PATH)
     except OSError as exc:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
         # the token still works for this process; only the next run pays for it
         print(f"warning: could not cache refresh token: {exc}", file=sys.stderr)
 
@@ -245,9 +292,13 @@ def make_token_provider():
 
     def token_provider():
         nonlocal refresh_token
-        tokens = renew(refresh_token)
-        refresh_token = tokens.get("refresh_token")
-        save_refresh_token(refresh_token)
+        with cache_lock():
+            # re-read inside the lock: another process may have rotated the
+            # token since we last looked, and the old one is now spent
+            refresh_token = load_refresh_token() or refresh_token
+            tokens = renew(refresh_token)
+            refresh_token = tokens.get("refresh_token")
+            save_refresh_token(refresh_token)
         return tokens["access_token"]
 
     return token_provider

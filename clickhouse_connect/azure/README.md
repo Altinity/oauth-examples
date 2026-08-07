@@ -20,6 +20,7 @@ though each script hand-rolls the flow with `requests` instead of using MSAL.
 | **Confidential client, headless** (`confidential_client_sample.py`) | `confidential_client.py` | client secret; client-credentials, no user | auto-provisioned, from the service principal's `oid` |
 | **Confidential client, web app** (`authorization-code-flow-sample`) | `web_app.py` | client secret; auth code + PKCE, delegated user access, per-user sessions | pre-defined `CH_JWT_USER`, from `upn` |
 | Device code (no MSAL counterpart here) | `app.py` | no secret; sign in from any device | pre-defined `CH_JWT_USER`, from `upn` |
+| Connection pool (no MSAL counterpart here) | `pooled.py` | no sign-in of its own; refreshes the token `interactive.py` cached, behind one lock-guarded provider | pre-defined `CH_JWT_USER`, from `upn` |
 
 `interactive.py` also covers the confidential *desktop* variant: set
 `AZURE_INTERACTIVE_CLIENT_SECRET` and it authenticates the client on the code
@@ -56,6 +57,7 @@ the two browser flows need one.
 | `web_app.py` | `http://localhost:8500/auth/callback` | **Web** | `AZURE_WEB_REDIRECT_URI` (+ `WEB_APP_PORT`) |
 | `app.py` | none — device code shows a code instead of redirecting | | |
 | `confidential_client.py` | none — no browser, no user | | |
+| `pooled.py` | none — never signs in; refreshes `interactive.py`'s cached token | | |
 
 *Authentication → Add a platform*, then add the URI. Two things to get right:
 
@@ -106,6 +108,8 @@ python app.py                  # device code: prints a code to enter in a browse
 python interactive.py          # browser on first run, silent refresh after
 python confidential_client.py  # needs AZURE_CLIENT_SECRET; no browser
 python web_app.py              # needs AZURE_CLIENT_SECRET; then open http://localhost:8500/
+python pooled.py               # pool of clients sharing one token provider;
+                               # run interactive.py first, it never signs in itself
 ```
 
 The three delegated scripts print `currentUser(): you@example.com`;
@@ -113,13 +117,15 @@ The three delegated scripts print `currentUser(): you@example.com`;
 `web_app.py` shows `currentUser()` and the token's remaining lifetime, and
 renews on reload once the token has expired.
 
-Only `interactive.py` persists anything: it caches its refresh token mode 0600
-in `~/.cache/clickhouse-connect-azure/interactive.json` (`AZURE_TOKEN_CACHE`),
-so later runs renew silently instead of opening a browser — delete that file to
-force a fresh sign-in, or set `AZURE_TOKEN_CACHE=none` to keep the token in
-memory only. Every other script's tokens live only as long as its process. The
-pre-defined CH user is created on first init only, so after changing
-`CH_JWT_USER` re-provision with
+`interactive.py` and `pooled.py` share one on-disk refresh-token cache, mode
+0600, at `$XDG_CACHE_HOME/clickhouse-connect-azure/interactive.json` —
+`~/.cache/...` only when `XDG_CACHE_HOME` is unset. `AZURE_TOKEN_CACHE` picks
+another path, or `none` to keep the token in memory. `interactive.py` writes it
+after signing in; `pooled.py` reads it and rewrites it on every renewal, so
+running either leaves a long-lived credential on disk. Delete the file (mind
+`XDG_CACHE_HOME`) to force a fresh sign-in. `app.py`, `confidential_client.py`
+and `web_app.py` persist nothing. The pre-defined CH user is created on first
+init only, so after changing `CH_JWT_USER` re-provision with
 `docker compose down -v && docker compose up -d`.
 
 ## ClickHouse side
@@ -138,6 +144,35 @@ it first decides the username — and precedence follows the processor **name's
 sort order**, not the order in the file. `azure` sorts before `azure_app`, which
 is what keeps delegated tokens on the pre-defined user; a name sorting after
 `azure_app` would silently auto-provision an `oid`-named user instead.
+
+## Connection pooling and one shared token
+
+`pooled.py` covers the multi-client case. The short version:
+
+- **Pooling and bearer auth do not interact.** Every plain-HTTP client in a
+  process shares one urllib3 `PoolManager`, but `Authorization` is a per-client
+  header applied per request, so a pooled connection carries the token of
+  whoever is using it. A JWT binds to no connection and no session.
+- **One access token for the whole pool is the goal**, not one per client. N
+  tokens means N token-endpoint calls, and with rotation each new token
+  invalidates the previous refresh token.
+- **A pool of clients is one of two options.** The driver rejects concurrent
+  queries sharing a session id, so either give each thread its own client (a
+  pool, and its own ClickHouse session), or pass `autogenerate_session_id=False`
+  to a single shared client, which drops the session id and the guard with it —
+  that is what `web_app.py` does. Pool when you want per-thread sessions.
+- **The provider must be lock-guarded.** The single-client providers in the
+  other scripts renew on every call, which is right when one client owns them —
+  the driver only asks at init or after a rejection. Share one across clients
+  without a lock and concurrent callers submit the *same* refresh token; Azure
+  rotates on every use, so replaying a spent one can invalidate the token
+  family and force a fresh browser sign-in.
+
+`SharedToken` in `pooled.py` is the fix: a lock plus a short reuse window, so a
+renewal that just happened satisfies every caller queued behind it. Measured
+with 12 clients and 240 concurrent queries — one token-endpoint call to build
+the pool, none under load, and exactly one renewal when all 12 clients are
+rejected at once.
 
 ## Why an access token, not an id_token?
 
