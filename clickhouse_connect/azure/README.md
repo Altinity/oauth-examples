@@ -24,16 +24,14 @@ though each script hand-rolls the flow with `requests` instead of using MSAL.
 
 `interactive.py` also covers the confidential *desktop* variant: set
 `AZURE_INTERACTIVE_CLIENT_SECRET` and it authenticates the client on the code
-and refresh exchanges too — this is what avoids AADSTS7000218 (`must contain
-'client_assertion' or 'client_secret'`), the error MSAL's public-client
-`interactive_sample.py` hits against a confidential app. It is a separate
-variable from `AZURE_CLIENT_SECRET` on purpose: one `.env` serves every script
-here, and sending a secret from a *Mobile and desktop applications* redirect
-URI fails with AADSTS700025 (`Client is public`).
+and refresh exchanges too, which MSAL's public-client `interactive_sample.py`
+cannot do against a confidential app. It is deliberately separate from
+`AZURE_CLIENT_SECRET`, because one `.env` serves every script here and a public
+client must not send a secret — see [Redirect URIs](#redirect-uris).
 
 ## Azure app registration
 
-One registration serves all four scripts.
+One registration serves every script here.
 
 - **Expose an API** (Application ID URI + a scope) — so it can issue a token for itself.
 - **`requestedAccessTokenVersion: 2`** in the manifest — else v1.0 tokens are rejected.
@@ -64,21 +62,20 @@ the two browser flows need one.
 - **The platform decides whether client authentication is required.** A URI
   under *Web* makes Azure demand a `client_secret` on the code and refresh
   exchanges; missing it gives AADSTS7000218 (`must contain 'client_assertion' or
-  'client_secret'`). Under *Mobile and desktop applications*, PKCE alone is
-  enough. That is the whole difference between the public and confidential
-  variants of the same code exchange — so `interactive.py` under *Web* needs
-  `AZURE_INTERACTIVE_CLIENT_SECRET`, and `web_app.py` always needs
-  `AZURE_CLIENT_SECRET`. Sending one from a *desktop* URI is the mirror-image
-  error, AADSTS700025 (`Client is public`).
+  'client_secret'`). Under *Mobile and desktop applications* PKCE alone is
+  enough, and sending a secret anyway is the mirror-image error, AADSTS700025
+  (`Client is public`). That is the whole difference between the public and
+  confidential variants of the same code exchange: `web_app.py` always needs
+  `AZURE_CLIENT_SECRET`, while `interactive.py` needs
+  `AZURE_INTERACTIVE_CLIENT_SECRET` only when its URI is registered under *Web*.
 - ***Allow public client flows* does not override the platform.** That toggle
   enables the flows with no redirect URI at all — device code, ROPC — which is
   why `app.py` needs no secret. A URI under *Web* still makes its own code
   exchange confidential, toggle or not.
-- **A URI belongs to exactly one platform**, and presenting a secret for a
-  *Mobile and desktop* URI fails the other way (AADSTS700025, `client is
-  public`). The default `http://localhost:8400/` under *Mobile and desktop
-  applications* is the public variant; the confidential desktop variant needs a
-  second URI of its own under *Web*, pointed at with `AZURE_REDIRECT_URI`.
+- **A URI belongs to exactly one platform.** The default
+  `http://localhost:8400/` sits under *Mobile and desktop applications*; the
+  confidential desktop variant needs a second URI of its own under *Web*,
+  selected with `AZURE_REDIRECT_URI`.
 - **The match is exact**, including the trailing slash and the port. All these
   URIs can coexist on one registration, each under its own platform.
 - *Implicit grant and hybrid flows* is **not** part of this: it returns tokens
@@ -111,21 +108,21 @@ python web_app.py              # needs AZURE_CLIENT_SECRET; then open http://loc
 python pooled.py               # pool sharing one token; run interactive.py first
 ```
 
-The three delegated scripts print `currentUser(): you@example.com`;
-`confidential_client.py` prints the service principal's object id.
-`web_app.py` shows `currentUser()` and the token's remaining lifetime, and
-renews on reload once the token has expired.
+The delegated scripts print `currentUser(): you@example.com`;
+`confidential_client.py` prints the service principal's object id instead.
+`web_app.py` also shows the token's remaining lifetime and renews on reload
+once it has expired.
 
-`interactive.py` and `pooled.py` share one on-disk refresh-token cache, mode
-0600, at `$XDG_CACHE_HOME/clickhouse-connect-azure/interactive.json` —
-`~/.cache/...` only when `XDG_CACHE_HOME` is unset. `AZURE_TOKEN_CACHE` picks
-another path, or `none` to keep the token in memory. `interactive.py` writes it
-after signing in; `pooled.py` reads it and rewrites it on every renewal, so
-running either leaves a long-lived credential on disk. Delete the file (mind
-`XDG_CACHE_HOME`) to force a fresh sign-in. `app.py`, `confidential_client.py`
-and `web_app.py` persist nothing. The pre-defined CH user is created on first
-init only, so after changing `CH_JWT_USER` re-provision with
-`docker compose down -v && docker compose up -d`.
+`interactive.py` and `pooled.py` share one refresh-token cache, mode 0600, at
+`$XDG_CACHE_HOME/clickhouse-connect-azure/interactive.json` (`~/.cache/...` when
+`XDG_CACHE_HOME` is unset). `interactive.py` writes it after signing in and
+`pooled.py` rewrites it on every renewal, so running either leaves a long-lived
+credential on disk — delete the file to force a fresh sign-in, or set
+`AZURE_TOKEN_CACHE=none` to keep the token in memory. `app.py`,
+`confidential_client.py` and `web_app.py` persist nothing.
+
+The pre-defined CH user is created on first init only, so after changing
+`CH_JWT_USER` re-provision with `docker compose down -v && docker compose up -d`.
 
 ## ClickHouse side
 
@@ -196,11 +193,10 @@ checks expiry, and never opens anything.
   rotates on every use, so replaying a spent one can invalidate the token
   family and force a fresh browser sign-in.
 
-`SharedToken` in `pooled.py` is the fix: a lock plus a short reuse window, so a
-renewal that just happened satisfies every caller queued behind it. Measured
-with 12 clients and 240 concurrent queries — one token-endpoint call to build
-the pool, none under load, and exactly one renewal when all 12 clients are
-rejected at once.
+`SharedToken`'s reuse window is what makes that cheap: a renewal that just
+happened satisfies every caller queued behind it. Measured with 12 clients and
+240 concurrent queries — one token-endpoint call to build the pool, none under
+load, and exactly one renewal when all 12 are rejected at once.
 
 ## Why an access token, not an id_token?
 
