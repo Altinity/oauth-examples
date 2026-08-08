@@ -1,17 +1,20 @@
 """
-Azure Entra delegated sign-in shared by a pool of clickhouse-connect clients.
+A pool of clickhouse-connect clients sharing one Entra access token.
 
-One token_provider serves every client in the pool. A lock plus a short reuse
-window means a burst of callers — pool warm-up, or every client meeting an
-expired token at once — costs exactly one token-endpoint call.
+    python interactive.py   # once: browser sign-in, seeds the token cache
+    python pooled.py        # this script
 
-This provider never opens a browser. It runs under a lock on behalf of clients
-that may be serving requests, so a dead refresh token raises ReauthRequired
-rather than blocking the whole pool for the length of a sign-in; the fix is to
-run interactive.py once, which seeds the shared refresh-token cache. web_app.py
-takes the same line and redirects to /login instead.
+Run interactive.py first. This script never signs in: it only refreshes the
+token interactive.py cached, and stops with ReauthRequired when there is none.
+That is on purpose — the provider runs under a lock on behalf of clients that
+may be serving requests, so stalling the whole pool for the length of a browser
+sign-in is worse than failing loudly. web_app.py takes the same line and
+redirects to /login.
 
-Renewals are wrapped in interactive.py's cache_lock so that processes sharing
+SharedToken is the token_provider every client is built with. A lock plus a
+short reuse window means a burst of callers — pool warm-up, or every client
+meeting an expired token at once — costs exactly one token-endpoint call.
+Renewals also take interactive.py's cache_lock, so separate processes sharing
 the cache file cannot spend the same rotating refresh token twice.
 
 Why a pool of clients: each gets its own ClickHouse session, and the driver
@@ -20,8 +23,8 @@ works if you pass autogenerate_session_id=False, which drops the session id
 and the guard with it — that is what web_app.py does. Use a pool when you want
 per-thread sessions, a shared client when you do not.
 
-The OAuth plumbing (refresh, refresh-token cache) is imported from
-interactive.py; this file is only about the sharing layer.
+Only the sharing layer lives here; the OAuth calls and the refresh-token cache
+are imported from interactive.py.
 
 Env:
   as interactive.py, plus

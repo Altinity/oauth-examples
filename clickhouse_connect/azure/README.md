@@ -20,7 +20,7 @@ though each script hand-rolls the flow with `requests` instead of using MSAL.
 | **Confidential client, headless** (`confidential_client_sample.py`) | `confidential_client.py` | client secret; client-credentials, no user | auto-provisioned, from the service principal's `oid` |
 | **Confidential client, web app** (`authorization-code-flow-sample`) | `web_app.py` | client secret; auth code + PKCE, delegated user access, per-user sessions | pre-defined `CH_JWT_USER`, from `upn` |
 | Device code (no MSAL counterpart here) | `app.py` | no secret; sign in from any device | pre-defined `CH_JWT_USER`, from `upn` |
-| Connection pool (no MSAL counterpart here) | `pooled.py` | no sign-in of its own; refreshes the token `interactive.py` cached, behind one lock-guarded provider | pre-defined `CH_JWT_USER`, from `upn` |
+| Connection pool (no MSAL counterpart here) | `pooled.py` | no sign-in of its own — refreshes `interactive.py`'s cached token | pre-defined `CH_JWT_USER`, from `upn` |
 
 `interactive.py` also covers the confidential *desktop* variant: set
 `AZURE_INTERACTIVE_CLIENT_SECRET` and it authenticates the client on the code
@@ -108,8 +108,7 @@ python app.py                  # device code: prints a code to enter in a browse
 python interactive.py          # browser on first run, silent refresh after
 python confidential_client.py  # needs AZURE_CLIENT_SECRET; no browser
 python web_app.py              # needs AZURE_CLIENT_SECRET; then open http://localhost:8500/
-python pooled.py               # pool of clients sharing one token provider;
-                               # run interactive.py first, it never signs in itself
+python pooled.py               # pool sharing one token; run interactive.py first
 ```
 
 The three delegated scripts print `currentUser(): you@example.com`;
@@ -145,9 +144,38 @@ sort order**, not the order in the file. `azure` sorts before `azure_app`, which
 is what keeps delegated tokens on the pre-defined user; a name sorting after
 `azure_app` would silently auto-provision an `oid`-named user instead.
 
-## Connection pooling and one shared token
+## Connection pooling (`pooled.py`)
 
-`pooled.py` covers the multi-client case. The short version:
+`pooled.py` runs on its own, but it never signs in. It refreshes the token
+`interactive.py` cached, so run that once first:
+
+```bash
+python interactive.py   # browser sign-in; writes the refresh-token cache
+python pooled.py        # builds a pool of clients that share one access token
+```
+
+With no cached token it stops with ``no cached refresh token — run `python
+interactive.py` first`` instead of opening a browser. That is deliberate: the
+provider runs under a lock on behalf of clients that may be mid-request, so
+stalling every one of them for the length of a sign-in is worse than failing
+loudly. `web_app.py` takes the same line and redirects to `/login`.
+
+The two scripts share the OAuth plumbing by import, and the refresh token
+through the cache file:
+
+```
+interactive.py        $XDG_CACHE_HOME/…/interactive.json        pooled.py
+──────────────        ──────────────────────────────────        ─────────
+browser sign-in ─write─► {"<tenant>/<client>":          ◄─read─── SharedToken
+                           {"refresh_token": …}}        ──write─► (rotates it)
+```
+
+What they do *not* share is the `token_provider` itself — each builds its own.
+`interactive.py`'s serves a single client and may open a browser.
+`pooled.py`'s `SharedToken` serves every client in the pool, is lock-guarded,
+checks expiry, and never opens anything.
+
+### Why it is built this way
 
 - **Pooling and bearer auth do not interact.** Every plain-HTTP client in a
   process shares one urllib3 `PoolManager`, but `Authorization` is a per-client
