@@ -146,6 +146,12 @@ keep the token in memory only. Production tools (`az`, `gh`, MSAL) put it in the
 OS keychain and fall back to plaintext only with a warning; these examples stay
 with a plain file to keep the flow readable.
 
+Not on disk, but the same class of problem: `web_app.py` takes Flask's cookie
+defaults, so its session cookie is `HttpOnly` and `SameSite=Lax` but **not**
+`Secure`. That is correct for `http://localhost` and wrong the moment it serves
+real traffic — behind HTTPS it needs `SESSION_COOKIE_SECURE = True`, or the
+cookie that stands in for a signed-in user travels in clear text.
+
 ## ClickHouse side
 
 `clickhouse-config/jwt_processors.xml` configures two `entra` processors,
