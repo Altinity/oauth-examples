@@ -90,6 +90,7 @@ the portal directly.
 
 ```bash
 cp .env.example .env      # set AZURE_TENANT_ID, AZURE_CLIENT_ID, CH_JWT_USER (= your upn)
+chmod 600 .env            # it will hold AZURE_CLIENT_SECRET
 docker compose up -d
 
 # clickhouse-connect >= 1.2 needs Python >= 3.10; macOS system python3 is 3.9
@@ -113,16 +114,37 @@ The delegated scripts print `currentUser(): you@example.com`;
 `web_app.py` also shows the token's remaining lifetime and renews on reload
 once it has expired.
 
-`interactive.py` and `pooled.py` share one refresh-token cache, mode 0600, at
-`$XDG_CACHE_HOME/clickhouse-connect-azure/interactive.json` (`~/.cache/...` when
-`XDG_CACHE_HOME` is unset). `interactive.py` writes it after signing in and
-`pooled.py` rewrites it on every renewal, so running either leaves a long-lived
-credential on disk — delete the file to force a fresh sign-in, or set
-`AZURE_TOKEN_CACHE=none` to keep the token in memory. `app.py`,
-`confidential_client.py` and `web_app.py` persist nothing.
-
 The pre-defined CH user is created on first init only, so after changing
 `CH_JWT_USER` re-provision with `docker compose down -v && docker compose up -d`.
+
+## Credentials on disk
+
+Two files hold real credentials. Neither is encrypted — both rely on filesystem
+permissions alone.
+
+| File | Holds | Mode | Written by |
+| --- | --- | --- | --- |
+| `.env` | `AZURE_CLIENT_SECRET` | **yours to set** | you |
+| `$XDG_CACHE_HOME/clickhouse-connect-azure/interactive.json` | the refresh token | `0600`, enforced on every write | `interactive.py`, `pooled.py` |
+
+**`chmod 600 .env`.** It is gitignored (`*.env`), but `cp .env.example .env`
+leaves it at your umask — usually `644`, world-readable. The client secret is
+the app's own identity: it needs no user and does not rotate on use, so it is
+the strongest credential here.
+
+The token cache falls back to `~/.cache/...` when `XDG_CACHE_HOME` is unset.
+`interactive.py` writes it after signing in, `pooled.py` rewrites it on every
+renewal, and `app.py`, `confidential_client.py` and `web_app.py` persist
+nothing. **Access tokens are never written to disk by any script** — only the
+refresh token is.
+
+That refresh token is a ~90-day sliding-window bearer credential sitting in
+plaintext, so any process running as you can act as the signed-in user until it
+expires, and it rides along in whatever backs up or syncs your cache directory.
+Delete the file to force a fresh sign-in, or set `AZURE_TOKEN_CACHE=none` to
+keep the token in memory only. Production tools (`az`, `gh`, MSAL) put it in the
+OS keychain and fall back to plaintext only with a warning; these examples stay
+with a plain file to keep the flow readable.
 
 ## ClickHouse side
 
