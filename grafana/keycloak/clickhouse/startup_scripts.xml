@@ -1,4 +1,12 @@
 <clickhouse>
+    <!--
+      Every statement here must be idempotent, because startup scripts run on
+      every server start and a single failing statement aborts the rest of the
+      sequence. A plain CREATE TABLE would throw TABLE_ALREADY_EXISTS on the
+      second start, skipping the GRANTs below while CREATE ROLE OR REPLACE had
+      already dropped the roles' privileges, leaving users authenticated but
+      unable to read anything.
+    -->
     <startup_scripts>
         <!-- this role will only be assigned to one user -->
         <scripts>
@@ -10,17 +18,10 @@
         </scripts>
 
         <scripts>
-            <query>CREATE TABLE default.can_read_specific (str String) ENGINE=TinyLog</query>
+            <query>CREATE TABLE IF NOT EXISTS default.can_read_specific ENGINE=TinyLog AS SELECT 'can_read_specific' AS str</query>
         </scripts>
         <scripts>
-            <query>CREATE TABLE default.can_read_general (str String) ENGINE=TinyLog</query>
-        </scripts>
-
-        <scripts>
-            <query>INSERT INTO default.can_read_specific VALUES ('can_read_specific');</query>
-        </scripts>
-        <scripts>
-            <query>INSERT INTO default.can_read_general VALUES ('can_read_general');</query>
+            <query>CREATE TABLE IF NOT EXISTS default.can_read_general ENGINE=TinyLog AS SELECT 'can_read_general' AS str</query>
         </scripts>
 
         <scripts>

@@ -1,4 +1,11 @@
 <clickhouse>
+    <!--
+      Startup scripts run on every server start, and one failing statement
+      aborts the rest of the sequence, so each statement is idempotent: a plain
+      CREATE TABLE would throw TABLE_ALREADY_EXISTS on the second start and
+      skip the GRANT above it, after CREATE ROLE OR REPLACE had already dropped
+      the role's privileges.
+    -->
     <startup_scripts>
         <scripts>
             <query>CREATE ROLE OR REPLACE token_test_role_1</query>
@@ -7,10 +14,7 @@
             <query>GRANT SELECT ON default.* TO token_test_role_1</query>
         </scripts>
         <scripts>
-            <query>CREATE TABLE default.test_table_1 (id UInt64) ENGINE=TinyLog</query>
-        </scripts>
-        <scripts>
-            <query>INSERT INTO default.test_table_1 VALUES (123);</query>
+            <query>CREATE TABLE IF NOT EXISTS default.test_table_1 ENGINE=TinyLog AS SELECT toUInt64(123) AS id</query>
         </scripts>
     </startup_scripts>
 </clickhouse>
