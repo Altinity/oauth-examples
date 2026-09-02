@@ -33,9 +33,8 @@ services:
       retries: 20
 
   clickhouse:
-    # 1809-* is the PR build that introduces clickhouse-client --jwt-command;
-    # bump to a release tag once Antalya cuts one that includes it.
-    image: altinityinfra/clickhouse-server:1809-26.3.10.20001.altinityantalya
+    # Released Antalya build; carries clickhouse-client --jwt-command.
+    image: altinity/clickhouse-server:26.6.2.20001.altinityantalya
     ports:
       - "8123:8123"
       - "9000:9000"

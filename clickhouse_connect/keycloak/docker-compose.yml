@@ -19,11 +19,11 @@ services:
       retries: 20
 
   clickhouse:
-    # Pinned to the same Antalya PR build the sibling demos use. This demo
-    # doesn't need --jwt-command (the JWT comes from app.py, not a
+    # Pinned to the same released Antalya build the sibling demos use. This
+    # demo doesn't need --jwt-command (the JWT comes from app.py, not a
     # server-spawned script) — any Antalya build with <enable_token_auth>
     # works — but using the same image keeps all demos in lockstep.
-    image: altinityinfra/clickhouse-server:1809-26.3.10.20001.altinityantalya
+    image: altinity/clickhouse-server:26.6.2.20001.altinityantalya
     ports:
       - "8123:8123"
       - "9000:9000"

@@ -5,7 +5,7 @@ name: clickhouse-client-azure
 services:
   clickhouse:
     # released Antalya build; carries clickhouse-client --jwt-command
-    image: altinity/clickhouse-server:26.3.13.20001.altinityantalya
+    image: altinity/clickhouse-server:26.6.2.20001.altinityantalya
     ports:
       - "8123:8123"
       - "9000:9000"
