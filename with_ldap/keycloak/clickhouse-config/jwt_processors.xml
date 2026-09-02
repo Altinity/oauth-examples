@@ -22,9 +22,11 @@
     <token_processors>
         <keycloak>
             <!-- jwt_dynamic_jwks: validate signatures locally against keys
-                 fetched from jwks_uri. The older 'OpenID' / 'oidc' type that
-                 also accepted userinfo_endpoint + introspection_endpoint is
-                 not supported in this Antalya build. -->
+                 fetched from jwks_uri. This is the right processor for
+                 Keycloak, whose access tokens are JWTs. The 'openid'
+                 processor is for IdPs with opaque tokens: it resolves
+                 identity through userinfo_endpoint plus optional RFC 7662
+                 introspection, and it rejects jwks_uri outright. -->
             <type>jwt_dynamic_jwks</type>
             <jwks_uri>http://keycloak:8080/realms/ch-demo/protocol/openid-connect/certs</jwks_uri>
             <username_claim>email</username_claim>
