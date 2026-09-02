@@ -1,19 +1,74 @@
 <clickhouse>
+    <!--
+      Keycloak token validation + token-based external user directory.
+
+      Keycloak issues JWT access tokens, so validation is fully local:
+      signatures are checked against the realm's published JWKS, reachable
+      inside the compose network as http://keycloak:8080. There is no
+      per-authentication round trip to Keycloak.
+
+      Do NOT add <jwks_uri> to an 'openid' processor. That combination is
+      rejected with INVALID_CONFIG_PARAMETER, and a token processor that
+      fails to parse disables token authentication for the whole server, so
+      every login then fails with "Token authentication is disabled" while
+      system.server_settings still reports enable_token_auth = 1. The
+      startup log is where the real reason shows up.
+    -->
     <token_processors>
         <keycloak>
-            <type>OpenID</type>
-            <userinfo_endpoint>http://keycloak:8080/realms/grafana/protocol/openid-connect/userinfo</userinfo_endpoint>
-            <token_introspection_endpoint>http://keycloak:8080/realms/grafana/protocol/openid-connect/token/introspect</token_introspection_endpoint>
+            <type>jwt_dynamic_jwks</type>
             <jwks_uri>http://keycloak:8080/realms/grafana/protocol/openid-connect/certs</jwks_uri>
+
+            <!-- Keycloak runs with the hostname=localhost flag, so the `iss`
+                 claim is http://localhost:8080/realms/grafana even for tokens
+                 Grafana fetches in-network via http://keycloak:8080. Pinning
+                 it keeps the processor from accepting tokens minted by another
+                 issuer whose signing key happens to appear in this JWKS. -->
+            <expected_issuer>http://localhost:8080/realms/grafana</expected_issuer>
+
+            <!-- expected_audience is intentionally absent: grafana-client emits
+                 no `aud` claim, so pinning one here would reject every token.
+                 To pin it, add an "Audience" mapper to the client in Keycloak
+                 first. expected_typ is absent for a related reason: it matches
+                 the JWT *header* `typ`, which Keycloak sets to "JWT" on both
+                 access and ID tokens, so pinning it would not tell the two
+                 apart. ClickHouse logs a startup warning for each of these
+                 unset pins; both warnings are expected in this demo. -->
+
+            <!-- username_claim defaults to `sub`, so ClickHouse usernames are
+                 Keycloak user UUIDs (this is what `select currentUser()`
+                 returns). Set it to `email` or `preferred_username` for
+                 human-readable names. -->
             <token_cache_lifetime>60</token_cache_lifetime>
         </keycloak>
+
+        <!-- An 'openid' processor is the alternative for IdPs whose access
+             tokens are opaque rather than JWTs. It resolves identity through
+             /userinfo and, with introspection credentials, adds an RFC 7662
+             revocation check that local JWT validation cannot perform:
+
+               <keycloak_oidc>
+                   <type>openid</type>
+                   <userinfo_endpoint>http://keycloak:8080/realms/grafana/protocol/openid-connect/userinfo</userinfo_endpoint>
+                   <token_introspection_endpoint>http://keycloak:8080/realms/grafana/protocol/openid-connect/token/introspect</token_introspection_endpoint>
+                   <introspection_client_id>grafana-client</introspection_client_id>
+                   <introspection_client_secret>grafana-secret</introspection_client_secret>
+                   <token_cache_lifetime>60</token_cache_lifetime>
+               </keycloak_oidc>
+
+             token_introspection_endpoint requires both introspection_client_id
+             and introspection_client_secret; setting it alone is rejected. -->
     </token_processors>
+
     <user_directories>
         <token>
             <processor>keycloak</processor>
             <common_roles>
                 <general_role />
             </common_roles>
+            <!-- Keycloak group names use dashes (can-read, grafana-admins);
+                 ClickHouse roles created in startup_scripts.xml use
+                 underscores (can_read). -->
             <roles_transform>s/-/_/g</roles_transform>
         </token>
     </user_directories>
