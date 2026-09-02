@@ -21,9 +21,10 @@ To run this setup, you must have Azure already configured. You need to know two 
 
 #### Run in Docker
 
-0. Clone this repository:
+0. Clone this repository and navigate to this example's directory:
 ```bash
-git clone https://github.com/zvonand/grafana-oauth.git
+git clone https://github.com/Altinity/oauth-examples.git
+cd oauth-examples/grafana/azure
 ```
 
 1. Inside it, create a file called `.env` with the following contents (use your corresponding values):
