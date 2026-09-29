@@ -1,0 +1,24 @@
+services:
+  clickhouse:
+    image: altinityinfra/clickhouse-server:2329-26.6.4.20001.altinityantalya
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      # required (:?): abort before creating the once-only volume if unset
+      AZURE_TENANT_ID: "${AZURE_TENANT_ID:?set AZURE_TENANT_ID in .env}"
+      AZURE_API_AUDIENCE: "${AZURE_API_AUDIENCE:?set AZURE_API_AUDIENCE in .env (= the token aud)}"
+      AWS_ROLE_ARN: "${AWS_ROLE_ARN:?set AWS_ROLE_ARN in .env}"
+      GLUE_REGION: "${GLUE_REGION:-eu-central-1}"
+      GLUE_DATABASE: "${GLUE_DATABASE:-az-tokens}"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse-config/clickhouse-low-ram-config.xml:/etc/clickhouse-server/config.d/clickhouse-low-ram-config.xml:ro
+      - ./clickhouse-config/clickhouse-low-ram-user-profile.xml:/etc/clickhouse-server/users.d/clickhouse-low-ram-user-profile.xml:ro
+      - ./clickhouse-config/token_forwarding.xml:/etc/clickhouse-server/config.d/token_forwarding.xml:ro
+      - ./init-clickhouse.sh:/docker-entrypoint-initdb.d/init-clickhouse.sh:ro
+    mem_limit: 4000M
+    cpus: 2.0
+
+volumes:
+  clickhouse-data:

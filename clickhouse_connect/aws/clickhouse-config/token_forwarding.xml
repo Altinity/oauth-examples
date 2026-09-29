@@ -1,0 +1,26 @@
+<clickhouse>
+    <!-- Keep the verified token in the session, so DataLakeCatalog databases
+         with oauth_forward_user_token = 1 can hand it to AWS STS. -->
+    <enable_token_forwarding>1</enable_token_forwarding>
+
+    <token_processors>
+        <entra>
+            <type>entra</type>
+            <tenant_id from_env="AZURE_TENANT_ID"></tenant_id>
+            <expected_audience from_env="AZURE_API_AUDIENCE"></expected_audience>
+            <!-- also becomes the STS RoleSessionName, visible in CloudTrail -->
+            <username_claim>preferred_username</username_claim>
+        </entra>
+    </token_processors>
+
+    <!-- Every valid token auto-provisions a user with glue_users
+         (init-clickhouse.sh). -->
+    <user_directories>
+        <token>
+            <processor>entra</processor>
+            <common_roles>
+                <glue_users />
+            </common_roles>
+        </token>
+    </user_directories>
+</clickhouse>
